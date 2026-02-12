@@ -19,12 +19,8 @@ Thumbs.db
 *.icloud
 
 # Secrets and environment configs
-.env
-.env.*
 *.env
 venv/
-.venv/
-rules/official-java-semgrep
 
 # IDE/editor files
 .vscode/
@@ -41,12 +37,8 @@ logs/
 *.xlsx
 *.xls
 reports/
-output/
 # sbom/git/*
 # sbom/images/*
-secgensbom_out/
-secgensbom_reports/
-.dependency-check-data/
 
 # Databases
 *.sqlite

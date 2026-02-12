@@ -1,11 +1,9 @@
 <div align="center">
-<h1><a id="intro"> Semgrep Java Rules </a><br></h1>
+<h1><a id="intro"> Semgrep AppSec Java Rules </a><br></h1>
 <a href="https://docs.github.com/en"><img src="https://img.shields.io/static/v1?logo=github&logoColor=fff&label=&message=Docs&color=36393f&style=flat" alt="GitHub Docs"></a>
 <a href="https://symbl.cc/en/unicode-table"><img src="https://img.shields.io/static/v1?logo=unicode&logoColor=fff&label=&message=Unicode&color=36393f&style=flat" alt="Unicode"></a>
 <a href="https://shields.io"><img src="https://img.shields.io/static/v1?logo=shieldsdotio&logoColor=fff&label=&message=Shields&color=36393f&style=flat" alt="Shields"></a>
-<img src="https://img.shields.io/badge/Contributor-Шмаков_И._С.-8b9aff" alt="Contributor Badge">
 <img src="https://img.shields.io/badge/git-%23F05033.svg?style=flat-square&logo=git&logoColor=white" alt="Git">
-
 <a href="https://www.markdownguide.org/"><img src="https://img.shields.io/badge/Markdown-000000.svg?logo=markdown&logoColor=white" alt="Markdown"></a>
 
 </div>
@@ -20,9 +18,18 @@
 
 <br>Салют :wave:,</br>
 
-Проект использует официальные Java правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules) путем использования git submodule. 
+Проект посвящен автоматизированному сканированию Java-кода на уязвимости с использованием официальных и кастомных правил Semgrep. 
 
-Кастомные правила лежат в `rules/custom/`, которые построены на базе **OWASP TOP 10 - 2024**. Отчеты формируются в форматах SARIF, JSON.
+Проект использует официальные Java правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules) путем использования git submodule. Кастомные правила лежат в `rules/custom/`, которые построены на базе **OWASP TOP 10 - 2024**. Отчеты формируются в форматах SARIF, JSON.
+
+## Возможности
+
+- **Официальные правила Community** — автоматически обновляемые правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules)
+- **Кастомные правила** — расширенный набор правил дополняющих официальные и не требующие дополнительной лицензии
+- **Автообновление** — правила обновляются каждые 2 недели через GitHub Actions
+- **Оптимизация** — только Java правила `sparse checkout`
+- **Отчёты** — JSON и SARIF форматы для интеграции с CI/CD
+- **Быстрый старт** — всё настроено через Makefile, готово к использованию из коробки
 
 ## Ruleset
 
@@ -31,18 +38,18 @@
 > - SQL Injection (JDBC, JPA, Hibernate, Spring Data, MyBatis)
 > - NoSQL Injection (MongoDB)
 > - OS Command Injection
-> - LDAP, XPath, XML/XXE
+> - LDAP, XPath, XML/ XXE
 > - Expression Language (SpEL, OGNL, MVEL, JEXL)
 > - Template Injection (FreeMarker, Velocity, Thymeleaf)
-> - Log/Header/Path Traversal
-> - JNDI/Script/XSS/SSRF
-> - Email/Regex/Format String/JMX/CSV/HTML/CRLF Injection
+> - Log/ Header/ Path Traversal
+> - JNDI/ Script/ XSS/ SSRF
+> - Email/ Regex/ Format String/ JMX/ CSV/ HTML/ CRLF Injection
 
 ### A0
 
 ## Tutorial
 
-### Описание команд
+### Команды
 
 ```bash
 $ make init # Инициализировать Java правила
@@ -62,19 +69,22 @@ $ make clean # Очистить отчеты
 ### Конфигурация
 
 ```bash
-  JAVA_RULES_DIR = rules/official-java-semgrep/java
-  CUSTOM_RULES_DIR = rules/custom
-  SRC_DIR = src
-  REPORT_DIR = reports
+JAVA_RULES_DIR = rules/official-java-semgrep/java
+CUSTOM_RULES_DIR = rules/custom
+SRC_DIR = src
+REPORT_DIR = reports
 ```
 
 ### Преднастройка
 
 ```bash
+SRC_DIR = app/src/main/java      # Замени в makefile путь к коду
+
 $ make init
 $ git submodule update --remote
 
 # Changelog Java правил
+
 $ cd rules/official-java-semgrep
 $ git log --oneline -10 -- java/
 
@@ -83,6 +93,7 @@ $ git log --oneline -10 -- java/
 ### Manual workflow
 
 ```bash
+$ brew install semgrep
 $ make update-rules
 $ make stats
 $ git diff rules/official-java-semgrep
@@ -91,22 +102,95 @@ $ make commit-rules
 $ git push
 ```
 
-### Troubleshooting
+## Правила
+
+### Добавление правила
+
+```bash
+$ vi/vim/nano rules/custom/my-custom-rule.yml # Создать файл правила
+$ make validate # Проверить валидность
+```
+
+### Паттерн правил
+
+```yaml
+rules:
+  - id: my-custom-sqli
+    languages: [java]
+    severity: CRITICAL
+    message: Potential SQL Injection detected
+    pattern: |
+      $STMT.executeQuery("SELECT * FROM users WHERE id = " + $VAR)
+    meta
+      owasp: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+```
+
+## Интеграция
+
+### CI/CD 
+
+```yaml
+- name: Run Semgrep Scan
+  run: make scan-ci
+
+- name: Upload results
+  uses: actions/upload-artifact@v4
+  with:
+    name: semgrep-report
+    path: reports/semgrep.json
+```
+
+### Pre-commit hook
+
+```bash
+# .git/hooks/pre-commit
+#!/bin/sh
+make scan-critical || exit 1
+```
+
+## Troubleshooting
 
 ```bash
 # Остались лишние правила
-$ d rules/official-java-semgrep
+$ cd rules/official-java-semgrep
+$ rm -rf * .[!.]*
+$ git reset --hard HEAD
+$ git sparse-checkout set java
+
+# Ошибка "sparse-checkout paths not up to date”
+$ cd rules/official-java-semgrep
 $ git sparse-checkout reapply
 $ git reset --hard HEAD
 ```
 
+## Metrics
+
+```bash
+$ make stats # Количество правил
+
+# История изменений правил
+$ cd rules/official-java-semgrep
+$ git log --oneline -10 -- java/
+
+$ semgrep --config rules/ src/ --json | jq '.results | group_by(.extra.severity) | map({severity: ..extra.severity, count: length})' # Количество находок по severity
+```
+
 ***
 
-### Структура репозитория
+## Структура репозитория
+
+```bash
+
+```
 
 ***
 
-### Tutorial
+## Refs
+* Semgrep Documentation
+* Official Semgrep Rules
+* OWASP Top 10 2024
+* CWE Database
 
 ***
 
