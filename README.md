@@ -20,6 +20,86 @@
 
 <br>Салют :wave:,</br>
 
+Проект использует официальные Java правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules) путем использования git submodule. 
+
+Кастомные правила лежат в `rules/custom/`, которые построены на базе **OWASP TOP 10 - 2024**. Отчеты формируются в форматах SARIF, JSON.
+
+## Ruleset
+
+### **A03:2024 – Injection (SQL/OS/Expression)**
+
+> - SQL Injection (JDBC, JPA, Hibernate, Spring Data, MyBatis)
+> - NoSQL Injection (MongoDB)
+> - OS Command Injection
+> - LDAP, XPath, XML/XXE
+> - Expression Language (SpEL, OGNL, MVEL, JEXL)
+> - Template Injection (FreeMarker, Velocity, Thymeleaf)
+> - Log/Header/Path Traversal
+> - JNDI/Script/XSS/SSRF
+> - Email/Regex/Format String/JMX/CSV/HTML/CRLF Injection
+
+### A0
+
+## Tutorial
+
+### Описание команд
+
+```bash
+$ make init # Инициализировать Java правила
+$ make stats # Проверить статистику правил
+$ make status # Статус submodule
+$ make scan # Полное сканирование
+$ make scan-custom # Кастомное сканирование
+$ make scan-official # Только официальные правила
+$ make scan-critical # Только критичные уязвимости
+$ make update-rules # Обновить правила до последней версии
+$ make commit-rules # Закоммитить изменения
+$ make validate # Провалидировать правила
+$ make help # Помощь
+$ make clean # Очистить отчеты
+```
+
+### Конфигурация
+
+```bash
+  JAVA_RULES_DIR = rules/official-java-semgrep/java
+  CUSTOM_RULES_DIR = rules/custom
+  SRC_DIR = src
+  REPORT_DIR = reports
+```
+
+### Преднастройка
+
+```bash
+$ make init
+$ git submodule update --remote
+
+# Changelog Java правил
+$ cd rules/official-java-semgrep
+$ git log --oneline -10 -- java/
+
+```
+
+### Manual workflow
+
+```bash
+$ make update-rules
+$ make stats
+$ git diff rules/official-java-semgrep
+$ make scan
+$ make commit-rules
+$ git push
+```
+
+### Troubleshooting
+
+```bash
+# Остались лишние правила
+$ d rules/official-java-semgrep
+$ git sparse-checkout reapply
+$ git reset --hard HEAD
+```
+
 ***
 
 ### Структура репозитория
