@@ -18,18 +18,13 @@ Thumbs.db
 .com.apple.timemachine.donotpresent
 *.icloud
 
-# Python cache and compiled files
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-
 # Secrets and environment configs
 .env
 .env.*
 *.env
 venv/
 .venv/
+rules/official-java-semgrep
 
 # IDE/editor files
 .vscode/
@@ -57,9 +52,6 @@ secgensbom_reports/
 *.sqlite
 *.db
 *.sql
-
-# Jupyter/Notebook
-.ipynb_checkpoints
 
 # Temporary/backup/compressed files
 *.bak
