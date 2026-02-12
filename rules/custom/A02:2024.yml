@@ -1,0 +1,1108 @@
+  # A02:2024 – Cryptographic Failures
+
+  rules:
+
+  - id: java-crypto-weak-hash-md5
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование MD5 для хеширования.
+      MD5 устарел и уязвим к collision attacks. Используйте SHA-256 или выше.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              MessageDigest.getInstance("MD5")
+          - pattern: |
+              MessageDigest.getInstance("md5")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327", "CWE-328"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-crypto-weak-hash-sha1
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование SHA-1 для хеширования.
+      SHA-1 считается слабым с 2017 года. Используйте SHA-256, SHA-384 или SHA-512.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              MessageDigest.getInstance("SHA-1")
+          - pattern: |
+              MessageDigest.getInstance("SHA1")
+          - pattern: |
+              MessageDigest.getInstance("sha1")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327", "CWE-328"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-crypto-hash-without-salt
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — хеширование пароля без соли.
+      Уязвимо к rainbow table атакам. Используйте BCrypt/Argon2/PBKDF2.
+    patterns:
+      - pattern: |
+          MessageDigest $MD = MessageDigest.getInstance($ALG);
+          ...
+          $MD.digest($PASSWORD.getBytes())
+      - pattern-not: |
+          $MD.update($SALT)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-760"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-bcrypt-low-rounds
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — BCrypt с менее чем 10 раундов.
+      Рекомендуется минимум 12 раундов для современных систем.
+    patterns:
+      - pattern: |
+          BCrypt.hashpw($PASSWORD, BCrypt.gensalt($ROUNDS))
+      - meta:variable-comparison:
+          meta:variable: $ROUNDS
+          comparison: $ROUNDS < 10
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-916"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # Weak Encryption Algorithms
+  
+  - id: java-crypto-weak-cipher-des
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование DES шифрования.
+      DES устарел с 1990-х годов (56-bit ключ). Используйте AES-256.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              Cipher.getInstance("DES")
+          - pattern: |
+              Cipher.getInstance("DES/...")
+          - pattern: |
+              Cipher.getInstance("DESede")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-crypto-weak-cipher-rc4
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование RC4 шифрования.
+      RC4 имеет множество известных уязвимостей. Используйте AES.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              Cipher.getInstance("RC4")
+          - pattern: |
+              Cipher.getInstance("ARCFOUR")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-crypto-weak-cipher-blowfish
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование Blowfish.
+      64-bit block size уязвим к birthday attacks. Используйте AES.
+    pattern: |
+      Cipher.getInstance("Blowfish")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-ecb-mode
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование ECB режима шифрования.
+      ECB не скрывает паттерны данных. Используйте CBC, GCM или CTR с IV.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              Cipher.getInstance("AES/ECB/...")
+          - pattern: |
+              Cipher.getInstance(".../ECB/...")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-crypto-no-padding
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — шифрование без padding (NoPadding).
+      Может привести к информационным утечкам. Используйте PKCS5Padding.
+    pattern: |
+      Cipher.getInstance(".../NoPadding")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  - id: java-crypto-hardcoded-iv
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — hardcoded Initialization Vector (IV).
+      IV должен быть случайным и уникальным для каждого шифрования.
+    patterns:
+      - pattern: |
+          byte[] iv = { $BYTES };
+          ...
+          IvParameterSpec ivSpec = new IvParameterSpec(iv);
+      - pattern: |
+          new IvParameterSpec("...".getBytes())
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-329"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # Key Management
+  
+  - id: java-crypto-hardcoded-key
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — hardcoded encryption key.
+      Ключи должны храниться в Secret Manager или HSM, не в коде.
+    patterns:
+      - pattern: |
+          byte[] key = { $BYTES };
+          ...
+          SecretKeySpec keySpec = new SecretKeySpec(key, $ALG);
+      - pattern: |
+          new SecretKeySpec("...".getBytes(), $ALG)
+      - pattern: |
+          private static final String SECRET_KEY = "...";
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-321", "CWE-798"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-crypto-weak-key-size-rsa
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — RSA ключ меньше 2048 бит.
+      Минимум 2048 бит, рекомендуется 3072 или 4096 бит.
+    patterns:
+      - pattern: |
+          KeyPairGenerator.getInstance("RSA")
+          ...
+          $GEN.initialize($SIZE)
+      - meta:variable-comparison:
+          meta:variable: $SIZE
+          comparison: $SIZE < 2048
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-326"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-weak-key-size-aes
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — AES ключ меньше 256 бит.
+      Рекомендуется использовать AES-256 для максимальной безопасности.
+    patterns:
+      - pattern: |
+          KeyGenerator.getInstance("AES")
+          ...
+          $GEN.init($SIZE)
+      - meta:variable-comparison:
+          meta:variable: $SIZE
+          comparison: $SIZE < 256
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-326"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  - id: java-crypto-key-derivation-no-salt
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — генерация ключа из пароля без соли.
+      Используйте PBKDF2 с солью и достаточным количеством итераций.
+    patterns:
+      - pattern: |
+          new PBEKeySpec($PASSWORD.toCharArray())
+      - pattern-not: |
+          new PBEKeySpec($PASSWORD.toCharArray(), $SALT, ...)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-760"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-pbkdf2-low-iterations
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — PBKDF2 с менее чем 10,000 итераций.
+      OWASP рекомендует минимум 120,000 для PBKDF2-HMAC-SHA256.
+    patterns:
+      - pattern: |
+          new PBEKeySpec($PASSWORD, $SALT, $ITERATIONS, $KEYLEN)
+      - meta:variable-comparison:
+          meta:variable: $ITERATIONS
+          comparison: $ITERATIONS < 10000
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-916"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+  
+  # TLS/SSL Issues
+  
+  - id: java-crypto-insecure-tls-version
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование устаревших TLS/SSL.
+      TLS 1.0, 1.1 и SSL устарели. Минимум TLS 1.2, рекомендуется TLS 1.3.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              SSLContext.getInstance("SSL")
+          - pattern: |
+              SSLContext.getInstance("SSLv2")
+          - pattern: |
+              SSLContext.getInstance("SSLv3")
+          - pattern: |
+              SSLContext.getInstance("TLS")
+          - pattern: |
+              SSLContext.getInstance("TLSv1")
+          - pattern: |
+              SSLContext.getInstance("TLSv1.1")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-crypto-insecure-skip-verify
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — отключена проверка SSL сертификатов.
+      Это позволяет Man-in-the-Middle атаки. Никогда не используйте в проде.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $CONN.setHostnameVerifier((hostname, session) -> true)
+          - pattern: |
+              HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> true)
+          - pattern: |
+              SSLSocketFactory.setHostnameVerifier(...)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-295"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-crypto-trust-all-certificates
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — TrustManager который принимает
+      все сертификаты. Это полностью отключает проверку SSL/TLS.
+    patterns:
+      - pattern: |
+          new X509TrustManager() {
+            public void checkClientTrusted(...) {}
+            public void checkServerTrusted(...) {}
+            ...
+          }
+      - pattern: |
+          TrustManager[] trustAll = new TrustManager[] { ... }
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-295"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-crypto-weak-cipher-suites
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование слабых cipher suites.
+      Избегайте NULL, EXPORT, DES, RC4, MD5 в названиях.
+    patterns:
+      - pattern-regex: "SSL_(RSA|DHE|ECDHE)_WITH_(NULL|EXPORT|DES|RC4|MD5)_"
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # Random Number Generation
+  
+  - id: java-crypto-insecure-random
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование java.util.Random
+      для криптографии. Random предсказуем. Используйте SecureRandom.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              new Random()
+          - pattern: |
+              Math.random()
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-330"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-crypto-securerandom-no-seed
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — SecureRandom без явной инициализации.
+      На некоторых платформах может использовать слабые источники энтропии.
+    patterns:
+      - pattern: |
+          SecureRandom $SR = new SecureRandom();
+      - pattern-not: |
+          $SR.nextBytes($SEED)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-330"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  - id: java-crypto-uuid-not-random
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — UUID.randomUUID() для секретов.
+      UUID не предназначен для криптографии. Используйте SecureRandom.
+    pattern: |
+      String $TOKEN = UUID.randomUUID().toString();
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-330"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # Password Storage
+  
+  - id: java-crypto-plaintext-password-storage
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — хранение пароля в открытом виде.
+      Пароли должны храниться хешированными через BCrypt/Argon2/PBKDF2.
+    patterns:
+      - pattern: |
+          $USER.setPassword($PASSWORD);
+          ...
+          $REPO.save($USER);
+      - pattern-not: |
+          $USER.setPassword($ENCODER.encode($PASSWORD));
+    paths:
+      include:
+        - "**/*Service.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-256", "CWE-312"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-crypto-reversible-password-encoding
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование Base64/Hex для
+      "хеширования" пароля. Это кодирование, не хеширование. Используйте BCrypt.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              Base64.getEncoder().encodeToString($PASSWORD.getBytes())
+          - pattern: |
+              DatatypeConverter.printHexBinary($PASSWORD.getBytes())
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-257"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-crypto-spring-noop-password-encoder
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — NoOpPasswordEncoder хранит
+      пароли в открытом виде. Используйте BCryptPasswordEncoder.
+    pattern: |
+      NoOpPasswordEncoder.getInstance()
+    paths:
+      include:
+        - "**/*SecurityConfig.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-256"]
+      likelihood: "LOW"
+      impact: "CRITICAL"
+  
+  # Sensitive Data Exposure
+  
+  - id: java-crypto-sensitive-data-in-logs
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — логирование чувствительных данных
+      (пароль, токен, ключ). Это может привести к утечке в логах.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              log.info("Password: " + $PASSWORD)
+          - pattern: |
+              log.debug("API Key: " + $KEY)
+          - pattern: |
+              log.error("Token: " + $TOKEN)
+          - pattern: |
+              System.out.println("Secret: " + $SECRET)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-532", "CWE-215"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-sensitive-data-in-exception
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — чувствительные данные в
+      сообщении исключения. Exception может попасть в логи или UI.
+    patterns:
+      - pattern: |
+          throw new Exception("... " + $PASSWORD + " ...")
+      - pattern: |
+          throw new RuntimeException("... apiKey=" + $KEY)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-209"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  - id: java-crypto-credit-card-in-logs
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — логирование номера кредитной карты.
+      Нарушение PCI DSS. Маскируйте данные перед логированием.
+    patterns:
+      - pattern-regex: "log\\.(info|debug|warn|error)\\(.*card.*number.*\\)"
+      - pattern-regex: "System\\.out\\.println\\(.*creditCard.*\\)"
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-532"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-crypto-ssn-in-logs
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — логирование SSN/паспорта.
+      PII данные должны быть замаскированы перед логированием.
+    patterns:
+      - pattern-regex: "log\\.(info|debug)\\(.*ssn.*\\)"
+      - pattern-regex: "log\\.(info|debug)\\(.*passport.*\\)"
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-532"]
+      likelihood: "LOW"
+      impact: "CRITICAL"
+  
+  # Database Encryption
+  
+  - id: java-crypto-database-password-plaintext
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — пароль БД в открытом виде в
+      application.properties. Используйте переменные окружения или Vault.
+    patterns:
+      - pattern-regex: "spring\\.datasource\\.password\\s*=\\s*[^$].*"
+    paths:
+      include:
+        - "**/application.properties"
+        - "**/application.yml"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-256"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-crypto-jpa-no-encryption
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — чувствительное поле в Entity
+      без шифрования. Используйте @Convert с AttributeConverter для шифрования.
+    patterns:
+      - pattern: |
+          @Column(name = "credit_card")
+          private String creditCard;
+      - pattern-not-inside: |
+          @Convert(converter = $CONVERTER.class)
+          ...
+    paths:
+      include:
+        - "**/*Entity.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-311"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+  
+  # File Encryption
+  
+  - id: java-crypto-unencrypted-file-write
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — запись чувствительных данных
+      в файл без шифрования. Зашифруйте перед записью.
+    patterns:
+      - pattern: |
+          Files.write($PATH, $SENSITIVE_DATA.getBytes())
+      - pattern: |
+          FileWriter $FW = new FileWriter($FILE);
+          ...
+          $FW.write($PASSWORD);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-311"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-temp-file-sensitive-data
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — чувствительные данные во временном
+      файле. Temp файлы могут быть доступны другим процессам/пользователям.
+    patterns:
+      - pattern: |
+          File tempFile = File.createTempFile(...);
+          ...
+          Files.write(tempFile.toPath(), $SENSITIVE.getBytes());
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-377"]
+      likelihood: "LOW"
+      impact: "HIGH"
+  
+  # HTTP Security
+  
+  - id: java-crypto-sensitive-data-in-url
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — чувствительные данные в URL.
+      URL логируются в access logs и browser history. Используйте POST body.
+    patterns:
+      - pattern: |
+          @GetMapping($PATH)
+          public $RET $METHOD(@RequestParam String password) { ... }
+      - pattern: |
+          @GetMapping($PATH)
+          public $RET $METHOD(@RequestParam String apiKey) { ... }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-598"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-http-basic-auth
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование HTTP Basic Auth.
+      Передаёт credentials в Base64 (не шифрование). Требуется HTTPS.
+    patterns:
+      - pattern: |
+          http.httpBasic()
+      - pattern-not-inside: |
+          http.requiresChannel().anyRequest().requiresSecure()
+    paths:
+      include:
+        - "**/*SecurityConfig.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-319"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-unencrypted-http-connection
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — HTTP соединение без TLS.
+      Данные передаются в открытом виде. Используйте HTTPS.
+    patterns:
+      - pattern: |
+          new URL("http://...")
+      - pattern: |
+          HttpClient.create().baseUrl("http://...")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-319"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+  
+  # Cache & Session Storage
+  
+  - id: java-crypto-sensitive-data-in-cache
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — чувствительные данные в кэше
+      без шифрования. Зашифруйте перед кэшированием или пометьте как no-cache.
+    patterns:
+      - pattern: |
+          @Cacheable(...)
+          public $TYPE $METHOD(...) {
+            ...
+            return $PASSWORD;
+          }
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-524"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  - id: java-crypto-sensitive-data-in-session
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — хранение чувствительных данных
+      в HTTP сессии. Минимизируйте данные в сессии, зашифруйте при необходимости.
+    patterns:
+      - pattern: |
+          $SESSION.setAttribute("password", $PASSWORD)
+      - pattern: |
+          $SESSION.setAttribute("creditCard", $CARD)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-359"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # Token & Secret Management
+  
+  - id: java-crypto-hardcoded-jwt-secret
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — hardcoded JWT secret key.
+      Если ключ скомпрометирован, все токены могут быть подделаны.
+    patterns:
+      - pattern: |
+          Algorithm.HMAC256("$SECRET")
+      - pattern: |
+          private static final String JWT_SECRET = "...";
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-798"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-crypto-api-key-hardcoded
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — hardcoded API key в коде.
+      Используйте переменные окружения или Secret Manager.
+    patterns:
+      - pattern: |
+          private static final String API_KEY = "...";
+      - pattern: |
+          String apiKey = "sk-...";
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-798"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-crypto-aws-credentials-hardcoded
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — hardcoded AWS credentials.
+      Используйте IAM роли или AWS Secrets Manager.
+    patterns:
+      - pattern: |
+          BasicAWSCredentials("AKIA...", "...")
+      - pattern: |
+          AWSStaticCredentialsProvider(new BasicAWSCredentials(...))
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-798"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+  
+  # Secure Communication
+  
+  - id: java-crypto-ftp-instead-sftp
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование FTP вместо SFTP.
+      FTP передаёт данные и credentials в открытом виде.
+    patterns:
+      - pattern: |
+          new URL("ftp://...")
+      - pattern: |
+          FTPClient $CLIENT = new FTPClient();
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-319"]
+      likelihood: "LOW"
+      impact: "HIGH"
+
+  - id: java-crypto-telnet-instead-ssh
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — использование Telnet вместо SSH.
+      Telnet передаёт данные в открытом виде. Используйте SSH/JSch.
+    pattern: |
+      TelnetClient $CLIENT = new TelnetClient();
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-319"]
+      likelihood: "LOW"
+      impact: "HIGH"
+
+  - id: java-crypto-smtp-no-tls
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — отправка email без TLS/STARTTLS.
+      Email credentials и содержимое передаются в открытом виде.
+    patterns:
+      - pattern: |
+          props.put("mail.smtp.starttls.enable", "false")
+      - pattern-not: |
+          props.put("mail.smtp.ssl.enable", "true")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-319"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # Data Masking
+  
+  - id: java-crypto-no-pii-masking-in-logs
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — отсутствует маскирование PII
+      в логах. Email, phone, SSN должны быть замаскированы перед логированием.
+    patterns:
+      - pattern-regex: "log\\.(info|debug)\\(.*email.*\\)"
+      - pattern-regex: "log\\.(info|debug)\\(.*phone.*\\)"
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-532"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-toString-exposes-sensitive
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — toString() возвращает
+      чувствительные поля. Исключите password/token из toString().
+    patterns:
+      - pattern: |
+          @Override
+          public String toString() {
+            return "User{password=" + password + ...}";
+          }
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-209"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # Backup & Export
+  
+  - id: java-crypto-unencrypted-backup
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — создание backup без шифрования.
+      Backup должен быть зашифрован, особенно если содержит PII.
+    patterns:
+      - pattern: |
+          $BACKUP.createBackup($FILE);
+      - pattern-not: |
+          $CIPHER.encrypt($DATA)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-311"]
+      likelihood: "LOW"
+      impact: "HIGH"
+
+  - id: java-crypto-csv-export-no-encryption
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — экспорт данных в CSV без
+      шифрования. Экспортированные файлы должны быть зашифрованы или защищены.
+    patterns:
+      - pattern: |
+          @GetMapping("/export")
+          public void exportCsv(...) {
+            ...
+            $WRITER.write($USER.getPassword());
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-311"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # Mobile & API
+  
+  - id: java-crypto-android-sharedprefs-no-encryption
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — чувствительные данные в
+      SharedPreferences без шифрования. Используйте EncryptedSharedPreferences.
+    patterns:
+      - pattern: |
+          SharedPreferences $PREFS = getSharedPreferences(...);
+          ...
+          $EDITOR.putString("password", $PASSWORD);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-311"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-crypto-response-contains-sensitive
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — API возвращает чувствительные
+      данные в ответе. Не отправляйте password/token в API response.
+    patterns:
+      - pattern: |
+          @GetMapping($PATH)
+          public User $METHOD(...) {
+            return user;  // Может содержать password поле
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-200"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+  
+  # Miscellaneous
+  
+  - id: java-crypto-default-keystore-password
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — дефолтный пароль keystore
+      (changeit). Немедленно смените на уникальный.
+    patterns:
+      - pattern: |
+          KeyStore.getInstance(...).load(..., "changeit".toCharArray())
+      - pattern: |
+          System.setProperty("javax.net.ssl.keyStorePassword", "changeit")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-798"]
+      likelihood: "LOW"
+      impact: "CRITICAL"
+
+  - id: java-crypto-security-provider-not-validated
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A02:2024 (Cryptographic Failures) — добавление custom Security Provider
+      без валидации. Вредоносный провайдер может ослабить криптографию.
+    pattern: |
+      Security.addProvider(new $PROVIDER())
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A02:2024-Cryptographic Failures"]
+      cwe: ["CWE-327"]
+      likelihood: "LOW"
+      impact: "MEDIUM"

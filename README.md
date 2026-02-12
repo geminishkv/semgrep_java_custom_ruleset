@@ -33,7 +33,7 @@
 
 ## Ruleset
 
-### A01:2024 – Broken Access Controll (IDOR)
+### **A01:2024 – Broken Access Controll (IDOR)**
 
 > - IDOR (Insecure Direct Object References)
 > - Missing Authorization (@PreAuthorize, @Secured)
@@ -52,6 +52,23 @@
 > - Multi-tenancy
 > - Default Credentials, Rate Limiting, Error Messages
 
+### **A02:2024 – Cryptographic Failures**
+
+> - Слабые алгоритмы хеширования (MD5, SHA1)
+> - Слабое шифрование (DES, RC4, Blowfish, ECB)
+> - Управление ключами (hardcoded keys, weak key sizes, PBKDF2)
+> - TLS/ SSL проблемы (старые версии, отключенная проверка сертификатов)
+> - Генерация случайных чисел (Math.random vs SecureRandom)
+> - Хранение паролей (plaintext, без соли, BCrypt настройки)
+> - Утечка чувствительных данных (логи, исключения, URL)
+> - Шифрование БД и файлов
+> - HTTP безопасность (Basic Auth, HTTP вместо HTTPS)
+> - Управление токенами (JWT, API keys, AWS credentials)
+> - Безопасная коммуникация (FTP, Telnet, SMTP)
+> - Маскирование данных (PII в логах, toString)
+> - Backup и экспорт данных
+> - Mobile и API безопасность
+
 ### **A03:2024 – Injection (SQL/OS/Expression)**
 
 > - SQL Injection (JDBC, JPA, Hibernate, Spring Data, MyBatis)
@@ -64,9 +81,9 @@
 > - JNDI/ Script/ XSS/ SSRF
 > - Email/ Regex/ Format String/ JMX/ CSV/ HTML/ CRLF Injection
 
-### A0
+***
 
-## Tutorial
+## **Tutorial**
 
 ### Команды
 
@@ -119,9 +136,11 @@ $ git diff rules/official-java-semgrep
 $ make scan
 $ make commit-rules
 $ git push
+
+$ semgrep --config rules/custom/A01:2024.yml src/ # Сканирование конкретным выделенным конфигом
 ```
 
-## Правила
+## **Правила**
 
 ### Добавление правила
 
@@ -145,7 +164,7 @@ rules:
       cwe: ["CWE-89"]
 ```
 
-## Интеграция
+## **Интеграция**
 
 ### CI/CD 
 
@@ -168,7 +187,7 @@ rules:
 make scan-critical || exit 1
 ```
 
-## Troubleshooting
+## **Troubleshooting**
 
 ```bash
 # Остались лишние правила
@@ -183,7 +202,7 @@ $ git sparse-checkout reapply
 $ git reset --hard HEAD
 ```
 
-## Metrics
+## **Metrics**
 
 ```bash
 $ make stats # Количество правил
@@ -197,7 +216,7 @@ $ semgrep --config rules/ src/ --json | jq '.results | group_by(.extra.severity)
 
 ***
 
-## Структура репозитория
+## **Структура репозитория**
 
 ```bash
 
@@ -205,7 +224,8 @@ $ semgrep --config rules/ src/ --json | jq '.results | group_by(.extra.severity)
 
 ***
 
-## Refs
+## **Refs**
+
 * Semgrep Documentation
 * Official Semgrep Rules
 * OWASP Top 10 2024
