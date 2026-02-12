@@ -15,9 +15,9 @@ NC = \033[0m
 
 ## init: Инициализация submodule с Java правилами
 init:
-	@echo "$(GREEN)Initializing Java rules submodule...$(NC)"
+	@echo "$(GREEN) Initializing Java rules submodule...$(NC)"
 	git submodule update --init
-	@echo "$(YELLOW)🔧 Configuring sparse checkout for Java only...$(NC)"
+	@echo "$(YELLOW)⚠️ Configuring sparse checkout for Java only...$(NC)"
 	cd rules/official-java-semgrep && \
 		git sparse-checkout init --cone && \
 		git sparse-checkout set java && \
@@ -31,18 +31,18 @@ init:
 
 ## update-rules: Обновить Java правила до последней версии
 update-rules:
-	@echo "$(GREEN)Updating Java rules from upstream...$(NC)"
+	@echo "$(GREEN) Updating Java rules from upstream...$(NC)"
 	cd rules/official-java-semgrep && \
 		git fetch origin && \
 		git checkout main && \
 		git pull origin main && \
 		git sparse-checkout set java && \
 		cd ../..
-	@echo "$(YELLOW)📝 Staging changes...$(NC)"
+	@echo "$(YELLOW)⚠️ Staging changes...$(NC)"
 	git add rules/official-java-semgrep
 	@if ! git diff-index --quiet HEAD rules/official-java-semgrep 2>/dev/null; then \
 		echo "$(GREEN)✅ Java rules updated$(NC)"; \
-		echo "$(YELLOW)💡 Run 'git commit -m \"chore: update Java rules\"' to commit$(NC)"; \
+		echo "$(YELLOW)⚠️ Run 'git commit -m \"chore: update Java rules\"' to commit$(NC)"; \
 	else \
 		echo "$(GREEN)✅ Java rules already up to date$(NC)"; \
 	fi
@@ -53,14 +53,14 @@ commit-rules:
 		git commit -m "chore: update Semgrep Java rules from official repository"; \
 		echo "$(GREEN)✅ Changes committed$(NC)"; \
 	else \
-		echo "$(YELLOW)⚠️  No changes to commit$(NC)"; \
+		echo "$(YELLOW)⚠️ No changes to commit$(NC)"; \
 	fi
 
 # Scan
 
 ## scan: Полное сканирование Java (официальные + кастомные правила)
 scan:
-	@echo "$(GREEN)🔍 Scanning with all rules...$(NC)"
+	@echo "$(GREEN) Scanning with all rules...$(NC)"
 	@mkdir -p $(REPORT_DIR)
 	semgrep --config $(JAVA_RULES_DIR)/ \
 		--config $(CUSTOM_RULES_DIR)/ \
@@ -71,17 +71,17 @@ scan:
 
 ## scan-official: Сканирование только официальными Java правилами
 scan-official:
-	@echo "$(GREEN)🔍 Scanning with official Java rules...$(NC)"
+	@echo "$(GREEN) Scanning with official Java rules...$(NC)"
 	semgrep --config $(JAVA_RULES_DIR)/ $(SRC_DIR)
 
 ## scan-custom: Сканирование только кастомными Java правилами
 scan-custom:
-	@echo "$(GREEN)🔍 Scanning with custom rules...$(NC)"
+	@echo "$(GREEN) Scanning with custom rules...$(NC)"
 	semgrep --config $(CUSTOM_RULES_DIR)/ $(SRC_DIR)
 
 ## scan-critical: Сканирование только критичных уязвимостей
 scan-critical:
-	@echo "$(GREEN)🚨 Scanning for CRITICAL issues...$(NC)"
+	@echo "$(GREEN)⚠️ Scanning for CRITICAL issues...$(NC)"
 	semgrep --config $(JAVA_RULES_DIR)/ \
 		--config $(CUSTOM_RULES_DIR)/ \
 		--severity ERROR \
@@ -89,7 +89,7 @@ scan-critical:
 
 ## scan-ci: Сканирование для CI/CD (JSON и SARIF)
 scan-ci:
-	@echo "$(GREEN)🤖 Running CI scan...$(NC)"
+	@echo "$(GREEN) Running CI scan...$(NC)"
 	@mkdir -p $(REPORT_DIR)
 	semgrep --config $(JAVA_RULES_DIR)/ \
 		--config $(CUSTOM_RULES_DIR)/ \
@@ -115,7 +115,7 @@ validate:
 
 ## stats: Показать статистику по правилам
 stats:
-	@echo "$(GREEN)📊 Rules Statistics$(NC)"
+	@echo "$(GREEN)📄 Rules Statistics$(NC)"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "Official Java rules: $$(find $(JAVA_RULES_DIR) -name '*.yml' -o -name '*.yaml' 2>/dev/null | wc -l | tr -d ' ')"
 	@if [ -d "$(CUSTOM_RULES_DIR)" ]; then \
@@ -131,7 +131,7 @@ stats:
 
 ## status: Показать статус submodule
 status:
-	@echo "$(GREEN)📋 Submodule Status$(NC)"
+	@echo "$(GREEN)📄 Submodule Status$(NC)"
 	@git submodule status rules/official-java-semgrep
 	@echo ""
 	@echo "Current commit:"
@@ -139,7 +139,7 @@ status:
 
 ## clean: Удалить отчеты
 clean:
-	@echo "$(GREEN)🧹 Cleaning reports...$(NC)"
+	@echo "$(GREEN) Cleaning reports...$(NC)"
 	rm -rf $(REPORT_DIR)
 	@echo "$(GREEN)✅ Reports cleaned$(NC)"
 
