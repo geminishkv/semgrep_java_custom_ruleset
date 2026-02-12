@@ -1,0 +1,1144 @@
+  # A03:2024 – Injection (SQL/OS/Expression)
+
+rules:
+
+  # SQL Injection - JDBC
+
+  - id: java-sqli-concat-critical
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — возможная SQL-инъекция через конкатенацию
+      строк в SQL-запросе. Используйте PreparedStatement с параметрами вместо
+      конкатенации пользовательских данных.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $STMT = $CONN.createStatement();
+              ...
+              $STMT.executeQuery("SELECT " + $VAR);
+          - pattern: |
+              $STMT = $CONN.createStatement();
+              ...
+              $STMT.execute("SELECT " + $VAR);
+          - pattern: |
+              $STMT = $CONN.createStatement();
+              ...
+              $STMT.executeUpdate("UPDATE " + $VAR);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-sqli-prepared-misuse-high
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — PreparedStatement, но параметры всё равно
+      подставляются конкатенацией. Используйте плейсхолдеры '?' и setXxx().
+    pattern: |
+      PreparedStatement $PSTMT = $CONN.prepareStatement("SELECT " + $VAR + " FROM " + $TABLE);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-sqli-string-format-query
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — SQL-запрос формируется через String.format()
+      с пользовательскими данными. Это приводит к SQL Injection.
+    patterns:
+      - pattern: |
+          String query = String.format("SELECT * FROM users WHERE id = %s", $VAR);
+          ...
+          $STMT.executeQuery(query);
+      - pattern: |
+          $STMT.executeQuery(String.format("SELECT * FROM %s WHERE %s", $T, $C));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-sqli-statement-builder-concat
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — StringBuilder/StringBuffer используется
+      для построения SQL-запроса с конкатенацией переменных. Используйте
+      параметризованные запросы.
+    patterns:
+      - pattern: |
+          StringBuilder $SB = new StringBuilder("SELECT ");
+          ...
+          $SB.append($VAR);
+          ...
+          $STMT.executeQuery($SB.toString());
+      - pattern: |
+          StringBuffer $SB = new StringBuffer("DELETE ");
+          ...
+          $SB.append($VAR);
+          ...
+          $STMT.execute($SB.toString());
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-sqli-raw-jdbc-template
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — использование JdbcTemplate.query()/update()
+      с конкатенацией строк вместо параметров. Используйте плейсхолдеры.
+    patterns:
+      - pattern: |
+          $JDBC_TPL.query("SELECT * FROM users WHERE username = '" + $USER + "'", ...);
+      - pattern: |
+          $JDBC_TPL.update("DELETE FROM logs WHERE id = " + $ID);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  # SQL Injection - JPA/Hibernate
+
+  - id: java-sqli-jpa-createquery-concat
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — EntityManager.createQuery() с конкатенацией
+      пользовательского ввода. Используйте параметры через setParameter().
+    patterns:
+      - pattern: |
+          $EM.createQuery("SELECT u FROM User u WHERE u.name = '" + $NAME + "'");
+      - pattern: |
+          $EM.createQuery("FROM " + $ENTITY + " WHERE id = " + $ID);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-sqli-hibernate-native-query
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — Hibernate Session.createSQLQuery() или
+      createNativeQuery() с конкатенацией. Это обходит ORM-защиту и позволяет
+      SQL-инъекцию.
+    patterns:
+      - pattern: |
+          $SESSION.createSQLQuery("SELECT * FROM users WHERE role = '" + $ROLE + "'");
+      - pattern: |
+          $EM.createNativeQuery("UPDATE " + $TABLE + " SET status = " + $STATUS);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-sqli-jpql-orderby-concat
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — ORDER BY/GROUP BY в JPQL с конкатенацией.
+      Невозможно использовать параметры для имён колонок, но нужна валидация
+      через whitelist.
+    patterns:
+      - pattern: |
+          $EM.createQuery("SELECT u FROM User u ORDER BY " + $SORT);
+      - pattern: |
+          $QUERY = "FROM Product p ORDER BY p." + $FIELD;
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-sqli-criteria-setparameter-misuse
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — CriteriaBuilder используется, но параметр
+      устанавливается через конкатенацию строки, а не через ParameterExpression.
+    pattern: |
+      CriteriaBuilder cb = $EM.getCriteriaBuilder();
+      ...
+      Root<$ENTITY> root = ...;
+      ...
+      Predicate pred = cb.equal(root.get($FIELD), $VAR);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  # SQL Injection - Spring Data / MyBatis
+
+  - id: java-sqli-spring-data-query-annotation
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — @Query с nativeQuery=true и конкатенацией
+      параметров. Используйте :paramName или ?1 плейсхолдеры.
+    patterns:
+      - pattern: |
+          @Query(value = "SELECT * FROM users WHERE username = '" + $USER + "'", nativeQuery = true)
+      - pattern: |
+          @Query("SELECT u FROM User u WHERE u.role = " + $ROLE)
+    paths:
+      include:
+        - "**/*Repository.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-sqli-mybatis-dollar-sign
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — MyBatis использует ${...} вместо #{...}.
+      ${} делает прямую подстановку строки без экранирования (SQL Injection).
+    patterns:
+      - pattern-regex: "\\$\\{[^}]+\\}"
+    paths:
+      include:
+        - "**/*Mapper.xml"
+        - "**/*Mapper.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-89"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  # NoSQL Injection
+
+  - id: java-nosql-mongo-query-concat
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — MongoDB запрос формируется конкатенацией
+      пользовательских данных. Используйте параметризованные Criteria/Filters.
+    patterns:
+      - pattern: |
+          DBObject query = (DBObject) JSON.parse("{ 'username': '" + $USER + "' }");
+      - pattern: |
+          Document query = Document.parse("{ 'email': '" + $EMAIL + "' }");
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-943"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-nosql-mongo-regex-injection
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — MongoDB $regex оператор с пользовательским
+      вводом без экранирования спецсимволов регулярных выражений.
+    pattern: |
+      Filters.regex($FIELD, $USER_INPUT);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-943"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+
+  # OS Command Injection
+
+  - id: java-os-command-injection-runtime
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — возможная командная инъекция через
+      Runtime.getRuntime().exec(). Никогда не передавайте туда неподготовленный
+      пользовательский ввод.
+    patterns:
+      - pattern: |
+          Runtime.getRuntime().exec($CMD);
+      - pattern: |
+          Runtime.getRuntime().exec($CMD + $VAR);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-78"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-os-command-injection-processbuilder-shell
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — ProcessBuilder с /bin/sh -c или cmd /c
+      и пользовательским вводом. Это позволяет выполнение shell-команд.
+    patterns:
+      - pattern: |
+          new ProcessBuilder("/bin/sh", "-c", $CMD).start();
+      - pattern: |
+          new ProcessBuilder("cmd", "/c", $CMD).start();
+      - pattern: |
+          new ProcessBuilder("bash", "-c", $USER_INPUT).start();
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-78"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-os-command-injection-processbuilder-concat
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — ProcessBuilder с конкатенацией пользовательских
+      данных в аргументах команды. Валидируйте и экранируйте ввод.
+    pattern: |
+      new ProcessBuilder("git", "clone", $URL + $REPO).start();
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-78"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-os-command-injection-apache-commons-exec
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — Apache Commons Exec с CommandLine.parse()
+      и пользовательским вводом. Используйте CommandLine.addArgument() с
+      handleQuoting=false.
+    patterns:
+      - pattern: |
+          CommandLine cmdLine = CommandLine.parse($CMD);
+      - pattern: |
+          DefaultExecutor executor = new DefaultExecutor();
+          ...
+          executor.execute(CommandLine.parse($USER_INPUT));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-78"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  # LDAP Injection
+
+  - id: java-ldap-injection-search-filter
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — LDAP SearchControls с конкатенацией
+      пользовательского ввода в фильтр. Экранируйте спецсимволы LDAP.
+    patterns:
+      - pattern: |
+          $CTX.search($BASE, "(uid=" + $USER + ")", $CONTROLS);
+      - pattern: |
+          $CTX.search($DN, "(&(cn=" + $NAME + ")(objectClass=person))", ...);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-90"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-ldap-injection-dn-concat
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — LDAP Distinguished Name (DN) формируется
+      конкатенацией. Экранируйте запятые, кавычки и другие метасимволы.
+    pattern: |
+      String dn = "cn=" + $USER + ",ou=users,dc=example,dc=com";
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-90"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+
+  # XPath Injection
+
+  - id: java-xpath-injection-concat
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — XPath выражение формируется конкатенацией
+      пользовательского ввода. Используйте XPathExpression с параметрами
+      или экранируйте спецсимволы.
+    patterns:
+      - pattern: |
+          XPath xpath = $FACTORY.newXPath();
+          ...
+          xpath.compile("//user[@name='" + $USER + "']");
+      - pattern: |
+          $XPATH.evaluate("//user[@id=" + $ID + "]", $DOC);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-643"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  # XML Injection / XXE
+
+  - id: java-xml-injection-documentbuilder
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — XML парсер без отключения внешних сущностей.
+      Включите защиту от XXE через setFeature().
+    patterns:
+      - pattern: |
+          DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+          DocumentBuilder builder = factory.newDocumentBuilder();
+      - pattern-not: |
+          $FACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-611"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-xml-injection-saxparser
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — SAXParser без защиты от XXE. Отключите
+      внешние DTD и сущности.
+    patterns:
+      - pattern: |
+          SAXParserFactory factory = SAXParserFactory.newInstance();
+          SAXParser parser = factory.newSAXParser();
+      - pattern-not: |
+          $FACTORY.setFeature("http://xml.org/sax/features/external-general-entities", false);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-611"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  # Expression Language Injection
+
+  - id: java-expression-language-injection-spel
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — Spring Expression Language (SpEL) парсит
+      пользовательский ввод. Это приводит к Remote Code Execution.
+    patterns:
+      - pattern: |
+          new org.springframework.expression.spel.standard.SpelExpressionParser()
+            .parseExpression($EXPR).getValue($CTX);
+      - pattern: |
+          ExpressionParser parser = new SpelExpressionParser();
+          ...
+          parser.parseExpression($USER_INPUT);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-expression-language-injection-ognl
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — OGNL (Object-Graph Navigation Language)
+      выполняет пользовательский ввод. Известна множеством RCE-уязвимостей.
+    patterns:
+      - pattern: |
+          Ognl.getValue($EXPR, $CONTEXT, $ROOT);
+      - pattern: |
+          OgnlContext context = ...;
+          ...
+          Ognl.parseExpression($USER_INPUT);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-expression-language-injection-mvel
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — MVEL компилирует и выполняет пользовательское
+      выражение. Это позволяет выполнение произвольного кода.
+    patterns:
+      - pattern: |
+          MVEL.eval($EXPR);
+      - pattern: |
+          MVEL.executeExpression(MVEL.compileExpression($USER_INPUT));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-expression-language-injection-jexl
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — Apache Commons JEXL выполняет пользовательские
+      выражения. Без sandboxing это RCE.
+    patterns:
+      - pattern: |
+          JexlEngine jexl = new JexlBuilder().create();
+          ...
+          jexl.createExpression($USER_INPUT).evaluate($CONTEXT);
+      - pattern: |
+          $ENGINE.createScript($EXPR).execute($CTX);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  # Template Injection
+
+  - id: java-template-injection-freemarker
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — FreeMarker Template с пользовательским
+      вводом без sandboxing. Это Server-Side Template Injection (SSTI/RCE).
+    patterns:
+      - pattern: |
+          Template template = $CFG.getTemplate($USER_INPUT);
+      - pattern: |
+          new Template($NAME, new StringReader($USER_TEMPLATE), $CFG);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-template-injection-velocity
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — Apache Velocity Template парсит пользовательский
+      шаблон. Без ограничений это приводит к RCE.
+    patterns:
+      - pattern: |
+          Velocity.evaluate($CONTEXT, $WRITER, $LOG_TAG, $USER_TEMPLATE);
+      - pattern: |
+          $ENGINE.evaluate($CTX, $OUT, "template", $INPUT);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-template-injection-thymeleaf-inline
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — Thymeleaf с [[${...}]] inline expressions
+      и пользовательским вводом. Может привести к XSS или SSTI.
+    pattern-regex: "\\[\\[\\$\\{.*\\}\\]\\]"
+    paths:
+      include:
+        - "**/*.html"
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  # Log Injection
+
+  - id: java-log-injection-user-input
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — логирование пользовательского ввода без
+      санитизации. Злоумышленник может внедрить фальшивые записи или CRLF.
+    patterns:
+      - pattern: |
+          log.info("User login: " + $USER);
+      - pattern: |
+          logger.error("Error for user: " + $REQ.getParameter("username"));
+      - pattern: |
+          System.out.println("Input: " + $USER_INPUT);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-117"]
+      likelihood: "MEDIUM"
+      impact: "LOW"
+
+  - id: java-log-injection-crlf
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — логирование данных с возможными CRLF (\r\n).
+      Удаляйте или экранируйте переносы строк перед логированием.
+    pattern: |
+      log.info($MSG + $USER_DATA);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-117"]
+      likelihood: "LOW"
+      impact: "LOW"
+
+  # Header Injection
+
+  - id: java-header-injection-response
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — HttpServletResponse.setHeader() с пользовательским
+      вводом без валидации. Позволяет HTTP Response Splitting и XSS.
+    patterns:
+      - pattern: |
+          $RESP.setHeader("Location", $USER_INPUT);
+      - pattern: |
+          $RESP.addHeader($NAME, $REQ.getParameter($PARAM));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-113"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-header-injection-cookie
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — Cookie с пользовательским значением без
+      валидации. Может содержать CRLF для Header Injection.
+    pattern: |
+      Cookie cookie = new Cookie($NAME, $USER_INPUT);
+      ...
+      $RESP.addCookie(cookie);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-113"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  # Path Traversal
+
+  - id: java-path-traversal-file-read
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — чтение файла по пути из пользовательского
+      ввода без валидации. Позволяет Path Traversal (../../etc/passwd).
+    patterns:
+      - pattern: |
+          new File($BASE_DIR + $USER_INPUT);
+      - pattern: |
+          new FileInputStream($REQ.getParameter("file"));
+      - pattern: |
+          Files.readAllBytes(Paths.get($USER_PATH));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-22"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-path-traversal-file-write
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — запись файла по пути из пользовательского
+      ввода. Позволяет перезапись критических файлов системы.
+    patterns:
+      - pattern: |
+          new FileOutputStream($USER_INPUT);
+      - pattern: |
+          Files.write(Paths.get($REQ.getParameter("path")), $DATA);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-22"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-path-traversal-zipentry
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — ZipEntry.getName() используется без проверки
+      на path traversal при распаковке архива (Zip Slip).
+    patterns:
+      - pattern: |
+          ZipEntry entry = $ZIP_INPUT.getNextEntry();
+          ...
+          File file = new File($DEST_DIR, entry.getName());
+      - pattern-not: |
+          ...
+          if (entry.getName().contains("..")) { ... }
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-22"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  # JNDI Injection
+
+  - id: java-jndi-injection-lookup
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — JNDI lookup с пользовательским вводом.
+      Это известная уязвимость Log4Shell (CVE-2021-44228) и подобные.
+    patterns:
+      - pattern: |
+          $CTX.lookup($USER_INPUT);
+      - pattern: |
+          InitialContext ctx = new InitialContext();
+          ...
+          ctx.lookup($REQ.getParameter("jndi"));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-95"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  # Script Injection (JavaScript, Groovy, etc.)
+
+  - id: java-script-injection-nashorn
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — Nashorn JavaScript Engine выполняет
+      пользовательский скрипт. Это приводит к RCE.
+    patterns:
+      - pattern: |
+          ScriptEngine engine = new ScriptEngineManager().getEngineByName("nashorn");
+          ...
+          engine.eval($USER_SCRIPT);
+      - pattern: |
+          $ENGINE.eval($REQ.getParameter("script"));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-script-injection-groovy
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — GroovyShell выполняет пользовательский код.
+      Без sandboxing это Remote Code Execution.
+    patterns:
+      - pattern: |
+          GroovyShell shell = new GroovyShell();
+          ...
+          shell.evaluate($USER_INPUT);
+      - pattern: |
+          new GroovyShell().parse($SCRIPT).run();
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-script-injection-python-jython
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A03:2024 (Injection) — Jython интерпретатор выполняет Python-код
+      из пользовательского ввода. Это RCE.
+    pattern: |
+      PythonInterpreter interpreter = new PythonInterpreter();
+      ...
+      interpreter.exec($USER_CODE);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "LOW"
+      impact: "CRITICAL"
+
+  # Reflected XSS
+
+  - id: java-reflected-xss-response-writer
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — возможный Reflected XSS: прямой вывод
+      параметра запроса в HTML/строку ответа без экранирования.
+    patterns:
+      - pattern: |
+          $RESP.getWriter().write("<h1>Results for: " + $REQ.getParameter("q") + "</h1>");
+      - pattern: |
+          PrintWriter out = $RESP.getWriter();
+          ...
+          out.println("<div>" + $USER_INPUT + "</div>");
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-79"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-reflected-xss-model-attribute
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — @RequestParam напрямую передаётся в Model
+      без валидации. В JSP/Thymeleaf без экранирования это XSS.
+    pattern: |
+      @GetMapping($PATH)
+      public String $METHOD(@RequestParam String $PARAM, Model model) {
+        model.addAttribute("search", $PARAM);
+        ...
+      }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-79"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+
+  # Server-Side Request Forgery (SSRF)
+
+  - id: java-ssrf-urlconnection-user-input
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — URLConnection открывается с URL из
+      пользовательского ввода. Это Server-Side Request Forgery (SSRF).
+    patterns:
+      - pattern: |
+          URL url = new URL($USER_INPUT);
+          ...
+          url.openConnection();
+      - pattern: |
+          new URL($REQ.getParameter("url")).openStream();
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-918"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-ssrf-resttemplate
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — RestTemplate делает запрос на URL из
+      пользовательского ввода без валидации (SSRF).
+    patterns:
+      - pattern: |
+          $REST_TPL.getForObject($USER_INPUT, ...);
+      - pattern: |
+          restTemplate.exchange($REQ.getParameter("url"), ...);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-918"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  # Email Injection
+
+  - id: java-email-injection-header
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — заголовок email формируется из пользовательского
+      ввода. Позволяет Email Header Injection (спам, фишинг).
+    patterns:
+      - pattern: |
+          MimeMessage message = new MimeMessage($SESSION);
+          ...
+          message.setSubject($USER_INPUT);
+      - pattern: |
+          message.setFrom(new InternetAddress($REQ.getParameter("from")));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-93"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  # Regex Injection (ReDoS)
+
+  - id: java-regex-injection-redos
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — регулярное выражение компилируется из
+      пользовательского ввода. Злоумышленник может вызвать ReDoS (DoS).
+    patterns:
+      - pattern: |
+          Pattern.compile($USER_INPUT);
+      - pattern: |
+          $STR.matches($REQ.getParameter("regex"));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-1333"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  # Format String Injection
+
+  - id: java-format-string-injection
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — String.format() с пользовательской строкой
+      формата. Может привести к раскрытию данных или DoS.
+    patterns:
+      - pattern: |
+          String.format($USER_INPUT, ...);
+      - pattern: |
+          $FORMATTER.format($REQ.getParameter("fmt"), ...);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-134"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  # JMX Injection
+
+  - id: java-jmx-injection-objectname
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — ObjectName в JMX создаётся из пользовательского
+      ввода. Может привести к доступу к чувствительным MBeans.
+    pattern: |
+      ObjectName name = new ObjectName($USER_INPUT);
+      ...
+      $MBEAN_SERVER.getAttribute(name, ...);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-74"]
+      likelihood: "LOW"
+      impact: "HIGH"
+
+  # Bean Validation Injection
+
+  - id: java-bean-validation-expression-injection
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — @Pattern или custom validator с Expression
+      Language в сообщениях. Может привести к EL Injection.
+    pattern-regex: "@Pattern\\(.*message.*=.*\\$\\{.*\\}"
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-94"]
+      likelihood: "LOW"
+      impact: "HIGH"
+
+  # PDF Injection
+
+  - id: java-pdf-injection-itext
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — генерация PDF с пользовательским вводом
+      без санитизации. Может содержать JavaScript или ссылки на вредоносные ресурсы.
+    patterns:
+      - pattern: |
+          Document document = new Document();
+          ...
+          document.add(new Paragraph($USER_INPUT));
+      - pattern: |
+          PdfWriter writer = ...;
+          ...
+          writer.addJavaScript($REQ.getParameter("js"));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-74"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  # CSV Injection (Formula Injection)
+
+  - id: java-csv-formula-injection
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — CSV файл содержит данные, начинающиеся с
+      =, +, -, @ без санитизации. Excel может выполнить формулы (CSV Injection).
+    pattern: |
+      $WRITER.write($USER_INPUT);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-1236"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  # HTML Injection
+
+  - id: java-html-injection-jsp
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A03:2024 (Injection) — JSP <%= %> выводит пользовательский ввод
+      напрямую без JSTL c:out или fn:escapeXml(). Это XSS/HTML Injection.
+    pattern-regex: "<%=\\s*request\\.getParameter\\("
+    paths:
+      include:
+        - "**/*.jsp"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-79"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  # CRLF Injection
+
+  - id: java-crlf-injection-redirect
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A03:2024 (Injection) — sendRedirect() с пользовательским вводом
+      без валидации CRLF. Позволяет HTTP Response Splitting.
+    pattern: |
+      $RESP.sendRedirect($REQ.getParameter("redirect"));
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A03:2024-Injection"]
+      cwe: ["CWE-113"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
