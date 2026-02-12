@@ -31,6 +31,8 @@
 - **Отчёты** — JSON и SARIF форматы для интеграции с CI/CD
 - **Быстрый старт** — всё настроено через Makefile, готово к использованию из коробки
 
+***
+
 ## Ruleset
 
 ### **A01:2024 – Broken Access Controll (IDOR)**
@@ -140,6 +142,8 @@ $ git push
 $ semgrep --config rules/custom/A01:2024.yml src/ # Сканирование конкретным выделенным конфигом
 ```
 
+***
+
 ## **Правила**
 
 ### Добавление правила
@@ -164,6 +168,8 @@ rules:
       cwe: ["CWE-89"]
 ```
 
+***
+
 ## **Интеграция**
 
 ### CI/CD 
@@ -187,6 +193,8 @@ rules:
 make scan-critical || exit 1
 ```
 
+***
+
 ## **Troubleshooting**
 
 ```bash
@@ -201,6 +209,8 @@ $ cd rules/official-java-semgrep
 $ git sparse-checkout reapply
 $ git reset --hard HEAD
 ```
+
+***
 
 ## **Metrics**
 
@@ -219,7 +229,22 @@ $ semgrep --config rules/ src/ --json | jq '.results | group_by(.extra.severity)
 ## **Структура репозитория**
 
 ```bash
-
+.
+├── assets
+│   └── logotypemd.jpg
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── image.png
+├── LICENSE.md
+├── Makefile
+├── NOTICE.md
+├── README.md
+├── rules
+│   └── custom
+│       ├── A01:2024.yml
+│       ├── A02:2024.yml
+│       └── A03:2024.yml
+└──  SECURITY.md
 ```
 
 ***
