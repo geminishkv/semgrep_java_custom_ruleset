@@ -33,6 +33,25 @@
 
 ## Ruleset
 
+### A01:2024 – Broken Access Controll (IDOR)
+
+> - IDOR (Insecure Direct Object References)
+> - Missing Authorization (@PreAuthorize, @Secured)
+> - Spring Security Misconfiguration
+> - JWT Security Issues
+> - Session Management
+> - CORS Misconfiguration
+> - File Access Control
+> - URL/Referer-based Access Control
+> - Privilege Escalation
+> - API Key & Token Issues
+> - Mass Assignment
+> - GraphQL/WebSocket Access Control
+> - Actuator Exposure
+> - OAuth2/ SSO Issues
+> - Multi-tenancy
+> - Default Credentials, Rate Limiting, Error Messages
+
 ### **A03:2024 – Injection (SQL/OS/Expression)**
 
 > - SQL Injection (JDBC, JPA, Hibernate, Spring Data, MyBatis)

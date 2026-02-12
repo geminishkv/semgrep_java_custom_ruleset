@@ -1,0 +1,1051 @@
+  # A01:2024 – Broken Access Controll (IDOR)
+
+  rules:
+
+  - id: java-idor-direct-object-reference
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — прямой доступ к ресурсу по ID
+      из параметра запроса без проверки прав доступа (IDOR). Добавьте проверку
+      владельца ресурса или используйте @PreAuthorize.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @GetMapping("/$PATH/{id}")
+              public $RET $METHOD(@PathVariable $ID) {
+                return $SERVICE.findById($ID);
+              }
+          - pattern: |
+              @GetMapping("/$PATH/{id}")
+              public $RET $METHOD(@PathVariable("id") $TYPE $ID) {
+                return $REPO.findById($ID);
+              }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-639", "CWE-284"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-idor-requestparam-no-check
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — использование @RequestParam
+      для получения ID без проверки прав доступа.
+    pattern: |
+      @RequestMapping($PATH)
+      public $RET $METHOD(@RequestParam("id") $TYPE $ID) {
+        ...
+        return $SERVICE.findById($ID);
+      }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-639"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-idor-delete-without-auth
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — DELETE операция без проверки
+      прав владельца. Злоумышленник может удалить чужие ресурсы.
+    patterns:
+      - pattern: |
+          @DeleteMapping("/$PATH/{id}")
+          public $RET $METHOD(@PathVariable $ID) {
+            $SERVICE.deleteById($ID);
+            ...
+          }
+      - pattern: |
+          @DeleteMapping("/$PATH/{id}")
+          public $RET $METHOD(@PathVariable("id") $TYPE $ID) {
+            $REPO.deleteById($ID);
+            ...
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-284", "CWE-862"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-idor-update-without-ownership
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — UPDATE операция без проверки
+      владельца ресурса. Пользователь может изменять чужие данные.
+    patterns:
+      - pattern: |
+          @PutMapping("/$PATH/{id}")
+          public $RET $METHOD(@PathVariable $ID, @RequestBody $BODY) {
+            $ENTITY entity = $SERVICE.findById($ID);
+            ...
+            $SERVICE.save(entity);
+          }
+      - pattern: |
+          @PatchMapping("/$PATH/{id}")
+          public $RET $METHOD(@PathVariable $ID, ...) {
+            ...
+            $REPO.save($ENTITY);
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-284", "CWE-862"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+  
+  # Missing Authorization Annotations
+  
+  - id: java-missing-preauthorize-annotation
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — чувствительный endpoint без
+      @PreAuthorize, @Secured или @RolesAllowed. Требуется явная проверка прав.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @PostMapping($PATH)
+              public $RET $METHOD(...) {
+                ...
+              }
+          - pattern: |
+              @PutMapping($PATH)
+              public $RET $METHOD(...) {
+                ...
+              }
+          - pattern: |
+              @DeleteMapping($PATH)
+              public $RET $METHOD(...) {
+                ...
+              }
+      - pattern-not-inside: |
+          @PreAuthorize(...)
+          ...
+      - pattern-not-inside: |
+          @Secured(...)
+          ...
+      - pattern-not-inside: |
+          @RolesAllowed(...)
+          ...
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-862"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-admin-endpoint-no-role-check
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — admin endpoint без проверки роли.
+      Используйте @PreAuthorize("hasRole('ADMIN')").
+    patterns:
+      - pattern-regex: "@(Get|Post|Put|Delete)Mapping\\(\".*/admin/.*\"\\)"
+      - pattern-not-inside: |
+          @PreAuthorize("hasRole('ADMIN')")
+          ...
+      - pattern-not-inside: |
+          @PreAuthorize("hasAuthority('ADMIN')")
+          ...
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-862", "CWE-285"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-missing-method-security
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — публичный метод сервиса без
+      проверки прав. Добавьте @PreAuthorize или проверку в коде.
+    pattern: |
+      public $RET $METHOD($PARAMS) {
+        ...
+        $REPO.save(...);
+        ...
+      }
+    paths:
+      include:
+        - "**/*Service.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-862"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # Spring Security Misconfiguration
+  
+  - id: java-permitall-on-sensitive-paths
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — .permitAll() на чувствительных
+      путях (admin, api, config). Это полностью отключает авторизацию.
+    patterns:
+      - pattern: |
+          http.authorizeRequests()
+            .antMatchers("/admin/**").permitAll()
+      - pattern: |
+          http.authorizeHttpRequests()
+            .requestMatchers("/api/**").permitAll()
+    paths:
+      include:
+        - "**/*SecurityConfig.java"
+        - "**/*WebSecurityConfig.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-284"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-disable-csrf-protection
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — CSRF защита отключена через
+      .csrf().disable(). Это опасно для state-changing операций.
+    patterns:
+      - pattern: |
+          http.csrf().disable()
+      - pattern: |
+          http.csrf(csrf -> csrf.disable())
+    paths:
+      include:
+        - "**/*SecurityConfig.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-352"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-any-request-authenticated-after-permitall
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — .anyRequest().authenticated()
+      после .permitAll() может пропустить проверки из-за порядка правил.
+    pattern: |
+      http.authorizeRequests()
+        .antMatchers(...).permitAll()
+        .anyRequest().authenticated()
+    paths:
+      include:
+        - "**/*SecurityConfig.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-284"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+
+  - id: java-missing-global-method-security
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — отсутствует @EnableGlobalMethodSecurity.
+      Без этой аннотации @PreAuthorize/@Secured не работают.
+    pattern-not: |
+      @EnableGlobalMethodSecurity(prePostEnabled = true)
+      public class $CLASS { ... }
+    paths:
+      include:
+        - "**/*SecurityConfig.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-16"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # JWT Security Issues
+  
+  - id: java-jwt-no-signature-verification
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — JWT токен валидируется без
+      проверки подписи. Злоумышленник может подделать токен.
+    patterns:
+      - pattern: |
+          JWT.decode($TOKEN)
+      - pattern-not: |
+          JWT.require($ALGORITHM).build().verify($TOKEN)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-347"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-jwt-hardcoded-secret
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — захардкоженный JWT secret.
+      Используйте переменные окружения или Secret Manager.
+    patterns:
+      - pattern: |
+          Algorithm.HMAC256("$SECRET")
+      - pattern: |
+          Keys.hmacShaKeyFor("$SECRET".getBytes())
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-798", "CWE-321"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-jwt-none-algorithm
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — JWT использует алгоритм "none"
+      (без подписи). Токен может быть подделан.
+    pattern: |
+      JWT.create().withPayload(...).sign(Algorithm.none())
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-347"]
+      likelihood: "LOW"
+      impact: "CRITICAL"
+
+  - id: java-jwt-no-expiration-check
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — JWT токен без проверки срока
+      действия (exp claim). Украденный токен будет работать вечно.
+    patterns:
+      - pattern: |
+          JWT.decode($TOKEN)
+      - pattern-not: |
+          $DECODED.getExpiresAt()
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-613"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # Session Management
+  
+  - id: java-session-fixation-vulnerability
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — session ID не меняется после
+      аутентификации. Это позволяет Session Fixation атаку.
+    pattern-not: |
+      http.sessionManagement()
+        .sessionFixation().newSession()
+    paths:
+      include:
+        - "**/*SecurityConfig.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-384"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-cookie-missing-httponly
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — Cookie без HttpOnly флага.
+      Это позволяет XSS атаку украсть сессию через JavaScript.
+    patterns:
+      - pattern: |
+          Cookie $COOKIE = new Cookie($NAME, $VALUE);
+      - pattern-not: |
+          $COOKIE.setHttpOnly(true)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-1004"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+
+  - id: java-cookie-missing-secure
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — Cookie без Secure флага.
+      Сессия может быть перехвачена через HTTP (не HTTPS).
+    patterns:
+      - pattern: |
+          Cookie $COOKIE = new Cookie($NAME, $VALUE);
+      - pattern-not: |
+          $COOKIE.setSecure(true)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-614"]
+      likelihood: "MEDIUM"
+      impact: "MEDIUM"
+
+  - id: java-session-timeout-too-long
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — слишком большой session timeout.
+      Рекомендуется < 30 минут для чувствительных приложений.
+    pattern: |
+      server.servlet.session.timeout=$TIMEOUT
+    paths:
+      include:
+        - "**/application.properties"
+        - "**/application.yml"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-613"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # CORS Misconfiguration
+  
+  - id: java-cors-allow-all-origins
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — CORS разрешает все источники
+      через allowedOrigins("*"). Это отключает Same-Origin Policy.
+    patterns:
+      - pattern: |
+          $CONFIG.allowedOrigins("*")
+      - pattern: |
+          @CrossOrigin(origins = "*")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-942"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-cors-allow-credentials-with-wildcard
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — CORS с allowCredentials(true)
+      и wildcard origin (*). Это позволяет CSRF с любого домена.
+    patterns:
+      - pattern: |
+          $CONFIG.allowedOrigins("*")
+            .allowCredentials(true)
+      - pattern: |
+          @CrossOrigin(origins = "*", allowCredentials = "true")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-942"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-cors-allow-all-methods
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — CORS разрешает все HTTP методы.
+      Ограничьте только необходимыми (GET, POST).
+    pattern: |
+      $CONFIG.allowedMethods("*")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-942"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # File Access Control
+  
+  - id: java-file-download-idor
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — скачивание файла по имени/ID
+      без проверки владельца. Пользователь может скачать чужие файлы.
+    patterns:
+      - pattern: |
+          @GetMapping("/download/{filename}")
+          public $RET $METHOD(@PathVariable String filename) {
+            File file = new File($DIR, filename);
+            ...
+          }
+      - pattern: |
+          @GetMapping("/files/{id}")
+          public $RET $METHOD(@PathVariable $ID) {
+            return $SERVICE.getFile($ID);
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-639", "CWE-22"]
+      likelihood: "HIGH"
+      impact: "HIGH"
+
+  - id: java-insecure-file-permissions
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — файл создаётся с небезопасными
+      правами (world-readable/writable).
+    patterns:
+      - pattern: |
+          Files.setPosixFilePermissions($PATH, PosixFilePermissions.fromString("rwxrwxrwx"))
+      - pattern: |
+          new File($PATH).setReadable(true, false)
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-732"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # URL-based Access Control
+  
+  - id: java-url-based-access-control
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — проверка прав основана на URL
+      из запроса. Злоумышленник может манипулировать URL для обхода проверки.
+    patterns:
+      - pattern: |
+          String url = $REQ.getRequestURL().toString();
+          if (url.contains("admin")) {
+            ...
+          }
+      - pattern: |
+          if ($REQ.getRequestURI().startsWith("/admin")) {
+            ...
+          }
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-284"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-referer-based-access-control
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — проверка прав основана на Referer
+      заголовке. Referer легко подделать, это НЕ механизм безопасности.
+    patterns:
+      - pattern: |
+          String referer = $REQ.getHeader("Referer");
+          if (referer.contains("admin")) {
+            ...
+          }
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-807"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # Privilege Escalation
+  
+  - id: java-user-role-modification-no-check
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — изменение роли пользователя без
+      проверки прав. Обычный пользователь может сделать себя админом.
+    patterns:
+      - pattern: |
+          @PutMapping("/users/{id}/role")
+          public $RET $METHOD(@PathVariable $ID, @RequestParam String role) {
+            $USER.setRole(role);
+            ...
+          }
+      - pattern: |
+          public void updateRole($USERID, $ROLE) {
+            $USER.setRole($ROLE);
+            $REPO.save($USER);
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+        - "**/*Service.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-269"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-user-password-change-no-verification
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — смена пароля пользователя без
+      проверки текущего пароля. Злоумышленник может захватить аккаунт.
+    patterns:
+      - pattern: |
+          @PostMapping("/users/{id}/password")
+          public $RET $METHOD(@PathVariable $ID, @RequestParam String newPassword) {
+            $USER.setPassword(newPassword);
+            ...
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-620"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-account-takeover-email-change
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — изменение email без подтверждения
+      текущего пароля или email verification. Атака Account Takeover.
+    patterns:
+      - pattern: |
+          @PutMapping("/users/{id}/email")
+          public $RET $METHOD(@PathVariable $ID, @RequestParam String email) {
+            $USER.setEmail(email);
+            ...
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-287"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+  
+  # API Key & Token Issues
+  
+  - id: java-api-key-in-query-param
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — API ключ передаётся в query
+      параметре. Ключи логируются в access logs и browser history.
+    patterns:
+      - pattern: |
+          @GetMapping($PATH)
+          public $RET $METHOD(@RequestParam("apiKey") String apiKey) {
+            ...
+          }
+      - pattern: |
+          String apiKey = $REQ.getParameter("api_key");
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-598"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-api-key-no-rotation
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — отсутствует механизм ротации
+      API ключей. Скомпрометированный ключ невозможно отозвать.
+    pattern: |
+      @Value("${api.key}")
+      private String apiKey;
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-798"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # Mass Assignment
+  
+  - id: java-mass-assignment-requestbody
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — @RequestBody напрямую биндится
+      на entity без фильтрации полей. Пользователь может изменить role, isAdmin.
+    patterns:
+      - pattern: |
+          @PostMapping($PATH)
+          public $RET $METHOD(@RequestBody $ENTITY $VAR) {
+            $REPO.save($VAR);
+            ...
+          }
+      - pattern: |
+          @PutMapping($PATH)
+          public $RET $METHOD(@RequestBody User user) {
+            return $SERVICE.save(user);
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-915"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-missing-dto-layer
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — JPA Entity используется как
+      DTO в REST API. Используйте отдельные DTO для контроля полей.
+    patterns:
+      - pattern: |
+          @PostMapping($PATH)
+          public $ENTITY $METHOD(@RequestBody $ENTITY entity) {
+            ...
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-915"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+  
+  # GraphQL Access Control
+  
+  - id: java-graphql-missing-authorization
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — GraphQL resolver без проверки
+      прав доступа. Используйте @PreAuthorize или DataFetcher interceptor.
+    patterns:
+      - pattern: |
+          @QueryMapping
+          public $RET $METHOD(@Argument $ID) {
+            return $SERVICE.findById($ID);
+          }
+      - pattern: |
+          @MutationMapping
+          public $RET $METHOD(@Argument $INPUT) {
+            ...
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+        - "**/*Resolver.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-862"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # WebSocket Access Control
+  
+  - id: java-websocket-no-auth
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — WebSocket endpoint без
+      аутентификации. Любой может подключиться и читать/писать сообщения.
+    patterns:
+      - pattern: |
+          @MessageMapping($PATH)
+          public $RET $METHOD($PARAMS) {
+            ...
+          }
+      - pattern-not: |
+          @PreAuthorize(...)
+          ...
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-306"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # Actuator Exposure
+  
+  - id: java-actuator-no-security
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — Spring Boot Actuator endpoints
+      доступны без аутентификации. Это раскрывает чувствительную информацию.
+    pattern: |
+      management.endpoints.web.exposure.include=*
+    paths:
+      include:
+        - "**/application.properties"
+        - "**/application.yml"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-306"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-actuator-env-exposed
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — /actuator/env endpoint открыт.
+      Раскрывает переменные окружения, включая секреты.
+    pattern: |
+      management.endpoint.env.enabled=true
+    paths:
+      include:
+        - "**/application.properties"
+        - "**/application.yml"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-200"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # OAuth2 / SSO Issues
+  
+  - id: java-oauth2-missing-state-parameter
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — OAuth2 flow без state параметра.
+      Это позволяет CSRF атаку на OAuth callback.
+    pattern-not: |
+      $BUILDER.state($STATE)
+    paths:
+      include:
+        - "**/*OAuth*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-352"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-oauth2-open-redirect
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — OAuth2 redirect_uri не
+      валидируется. Позволяет Open Redirect и перехват authorization code.
+    patterns:
+      - pattern: |
+          @GetMapping("/oauth2/callback")
+          public $RET $METHOD(@RequestParam String redirect_uri) {
+            return "redirect:" + redirect_uri;
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-601"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+  
+  # Multi-tenancy Issues
+  
+  - id: java-missing-tenant-isolation
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — запрос к БД без фильтра по
+      tenantId. Один tenant может видеть данные другого.
+    patterns:
+      - pattern: |
+          $REPO.findAll()
+      - pattern-not: |
+          $REPO.findByTenantId($TENANT)
+    paths:
+      include:
+        - "**/*Service.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-566"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+
+  - id: java-tenant-id-from-user-input
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — tenantId берётся из запроса
+      пользователя. Пользователь может подделать tenantId и получить чужие данные.
+    patterns:
+      - pattern: |
+          @GetMapping($PATH)
+          public $RET $METHOD(@RequestParam String tenantId) {
+            return $SERVICE.findByTenantId(tenantId);
+          }
+      - pattern: |
+          String tenantId = $REQ.getParameter("tenant_id");
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-639"]
+      likelihood: "HIGH"
+      impact: "CRITICAL"
+  
+  # Miscellaneous
+  
+  - id: java-default-credentials
+    languages: [java]
+    severity: CRITICAL
+    message: |
+      OWASP A01:2024 (Broken Access Control) — дефолтные credentials (admin/admin).
+      Немедленно замените на уникальные.
+    patterns:
+      - pattern: |
+          username = "admin"
+          password = "admin"
+      - pattern: |
+          .inMemoryAuthentication()
+            .withUser("admin")
+            .password("password")
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-798"]
+      likelihood: "MEDIUM"
+      impact: "CRITICAL"
+
+  - id: java-password-in-get-request
+    languages: [java]
+    severity: HIGH
+    message: |
+      OWASP A01:2024 (Broken Access Control) — пароль передаётся через GET.
+      Пароль попадёт в логи и browser history. Используйте POST.
+    patterns:
+      - pattern: |
+          @GetMapping("/login")
+          public $RET $METHOD(@RequestParam String password) {
+            ...
+          }
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-598"]
+      likelihood: "MEDIUM"
+      impact: "HIGH"
+
+  - id: java-hardcoded-admin-check
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — проверка роли через хардкод
+      строки. Используйте константы или enum для ролей.
+    patterns:
+      - pattern: |
+          if ($USER.getRole().equals("admin")) {
+            ...
+          }
+      - pattern: |
+          if ($USER.getRole() == "ADMIN") {
+            ...
+          }
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-284"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  - id: java-missing-rate-limiting
+    languages: [java]
+    severity: MEDIUM
+    message: |
+      OWASP A01:2024 (Broken Access Control) — отсутствует rate limiting на
+      чувствительных endpoint (login, API). Возможны brute-force атаки.
+    patterns:
+      - pattern: |
+          @PostMapping("/login")
+          public $RET $METHOD(...) {
+            ...
+          }
+      - pattern-not-inside: |
+          @RateLimited
+          ...
+    paths:
+      include:
+        - "**/*Controller.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-307"]
+      likelihood: "LOW"
+      impact: "MEDIUM"
+
+  - id: java-verbose-error-messages
+    languages: [java]
+    severity: LOW
+    message: |
+      OWASP A01:2024 (Broken Access Control) — детальные сообщения об ошибках
+      авторизации. Не раскрывайте, существует ли ресурс или проблема в правах.
+    patterns:
+      - pattern: |
+          throw new AccessDeniedException("User does not own resource with id: " + $ID);
+      - pattern: |
+          return ResponseEntity.status(403).body("Access denied for user " + $USER);
+    paths:
+      include:
+        - "**/*.java"
+    meta:
+      owasp_top_10_2024: ["A01:2024-Broken Access Control"]
+      cwe: ["CWE-209"]
+      likelihood: "LOW"
+      impact: "LOW"
