@@ -9,7 +9,7 @@ This security policy describes how we handle security concerns in this project, 
 If you discover a vulnerability or security issue:
 
 1. Please do not disclose it publicly to prevent potential misuse.
-2. Report it directly via email to: shmakovis@inbox.ru
+2. Report it directly via email to: <shmakovis@inbox.ru>
 3. Provide a detailed description of the vulnerability, including:
    - Steps to reproduce
    - The project version where the issue was found
