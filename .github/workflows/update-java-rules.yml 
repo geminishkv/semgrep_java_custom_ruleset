@@ -1,0 +1,137 @@
+name: Update Java Rules
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # 1-я и 3-я неделя каждого месяца
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-schedule:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Check if it's biweekly Monday
+        id: check
+        run: |
+          week=$(date +%U)
+          if [ $((week % 2)) -eq 1 ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "✅ This is a biweekly Monday - will update"
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "⏭️  Skipping - not a biweekly Monday"
+          fi
+
+  update-rules:
+    needs: check-schedule
+    if: needs.check-schedule.outputs.should_run == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Configure sparse checkout for Java only
+        run: |
+          cd rules/official-java-semgrep
+          git sparse-checkout init --cone
+          git sparse-checkout set java
+          git sparse-checkout reapply
+          git reset --hard HEAD
+          cd ../..
+
+      - name: Update Java rules
+        id: update
+        run: |
+          cd rules/official-java-semgrep
+          
+          OLD_COMMIT=$(git rev-parse HEAD)
+          echo "old_commit=$OLD_COMMIT" >> $GITHUB_OUTPUT
+          
+          git fetch origin
+          git checkout main
+          git pull origin main
+          
+          # Получить новый коммит
+          NEW_COMMIT=$(git rev-parse HEAD)
+          echo "new_commit=$NEW_COMMIT" >> $GITHUB_OUTPUT
+          
+          cd ../..
+          
+          # Проверить изменения
+          if [ "$OLD_COMMIT" != "$NEW_COMMIT" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Rules updated from $OLD_COMMIT to $NEW_COMMIT"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "⚠️  No updates available"
+          fi
+
+      - name: Generate changelog
+        if: steps.update.outputs.has_changes == 'true'
+        id: changelog
+        run: |
+          cd rules/official-java-semgrep
+
+          CHANGELOG=$(git log --oneline ${{ steps.update.outputs.old_commit }}..${{ steps.update.outputs.new_commit }} --no-merges -- java/ | head -10)
+
+          cat > /tmp/changelog.txt << 'EOF'
+          ## Update: Semgrep Java Rules
+          
+          ### Changes
+          
+          Updated from commit `${{ steps.update.outputs.old_commit }}` to `${{ steps.update.outputs.new_commit }}`
+          
+          ### Recent commits in java/ directory:
+          
+          ```
+          $CHANGELOG
+          ```
+          
+          ### Review
+          
+          Please review the changes and merge if everything looks good.
+          
+          ### How to test locally
+          
+          ```bash
+          git checkout auto-update-java-rules
+          make scan
+          ```
+          EOF
+          
+          cd ../..
+
+      - name: Create Pull Request
+        if: steps.update.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: update Semgrep Java rules"
+          title: "Update: Semgrep Java Rules"
+          body-path: /tmp/changelog.txt
+          branch: auto-update-java-rules
+          delete-branch: true
+          labels: |
+            dependencies
+            automated
+            semgrep
+            java
+          reviewers: YOUR_GITHUB_USERNAME
+          assignees: YOUR_GITHUB_USERNAME
+
+      - name: No changes notification
+        if: steps.update.outputs.has_changes == 'false'
+        run: |
+          echo "ℹJava rules are already up to date"
