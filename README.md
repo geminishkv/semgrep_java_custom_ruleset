@@ -31,87 +31,17 @@
 - **Отчёты** — JSON и SARIF форматы для интеграции с CI/CD
 - **Быстрый старт** — всё настроено через Makefile, готово к использованию из коробки
 
-***
+## Сопроводительная информация
 
-## Ruleset
-
-### **A01:2024 – Broken Access Controll (IDOR)**
-
-> - IDOR (Insecure Direct Object References)
-> - Missing Authorization (@PreAuthorize, @Secured)
-> - Spring Security Misconfiguration
-> - JWT Security Issues
-> - Session Management
-> - CORS Misconfiguration
-> - File Access Control
-> - URL/Referer-based Access Control
-> - Privilege Escalation
-> - API Key & Token Issues
-> - Mass Assignment
-> - GraphQL/WebSocket Access Control
-> - Actuator Exposure
-> - OAuth2/ SSO Issues
-> - Multi-tenancy
-> - Default Credentials, Rate Limiting, Error Messages
-
-### **A02:2024 – Cryptographic Failures**
-
-> - Слабые алгоритмы хеширования (MD5, SHA1)
-> - Слабое шифрование (DES, RC4, Blowfish, ECB)
-> - Управление ключами (hardcoded keys, weak key sizes, PBKDF2)
-> - TLS/ SSL проблемы (старые версии, отключенная проверка сертификатов)
-> - Генерация случайных чисел (Math.random vs SecureRandom)
-> - Хранение паролей (plaintext, без соли, BCrypt настройки)
-> - Утечка чувствительных данных (логи, исключения, URL)
-> - Шифрование БД и файлов
-> - HTTP безопасность (Basic Auth, HTTP вместо HTTPS)
-> - Управление токенами (JWT, API keys, AWS credentials)
-> - Безопасная коммуникация (FTP, Telnet, SMTP)
-> - Маскирование данных (PII в логах, toString)
-> - Backup и экспорт данных
-> - Mobile и API безопасность
-
-### **A03:2024 – Injection (SQL/OS/Expression)**
-
-> - SQL Injection (JDBC, JPA, Hibernate, Spring Data, MyBatis)
-> - NoSQL Injection (MongoDB)
-> - OS Command Injection
-> - LDAP, XPath, XML/ XXE
-> - Expression Language (SpEL, OGNL, MVEL, JEXL)
-> - Template Injection (FreeMarker, Velocity, Thymeleaf)
-> - Log/ Header/ Path Traversal
-> - JNDI/ Script/ XSS/ SSRF
-> - Email/ Regex/ Format String/ JMX/ CSV/ HTML/ CRLF Injection
+- [JAVA правила](assets/docs/ruleset.md)
+- [Manual](assets/docs/manual.md)
+- [Integrations](assets/docs/integrations.md)
+- [Patterns](assets/docs/patterns.md)
+- [Metrics](assets/docs/metrics.md)
 
 ***
 
 ## **Tutorial**
-
-### Команды
-
-```bash
-$ make init # Инициализировать Java правила
-$ make stats # Проверить статистику правил
-$ make status # Статус submodule
-$ make scan # Полное сканирование
-$ make scan-custom # Кастомное сканирование
-$ make scan-official # Только официальные правила
-$ make scan-critical # Только критичные уязвимости
-$ make update-rules # Обновить правила до последней версии
-$ make commit-rules # Закоммитить изменения
-$ make validate # Провалидировать правила
-$ make help # Помощь
-$ make clean # Очистить отчеты
-```
-
-### Конфигурация
-
-```bash
-JAVA_RULES_DIR = rules/official-java-semgrep/java
-CUSTOM_RULES_DIR = rules/custom
-SRC_DIR = src
-REPORT_DIR = reports
-```
 
 ### Преднастройка
 
@@ -144,57 +74,6 @@ $ semgrep --config rules/custom/A01:2024.yml src/ # Сканирование к�
 
 ***
 
-## **Правила**
-
-### Добавление правила
-
-```bash
-$ vi/vim/nano rules/custom/my-custom-rule.yml # Создать файл правила
-$ make validate # Проверить валидность
-```
-
-### Паттерн правил
-
-```yaml
-rules:
-  - id: my-custom-sqli
-    languages: [java]
-    severity: CRITICAL
-    message: Potential SQL Injection detected
-    pattern: |
-      $STMT.executeQuery("SELECT * FROM users WHERE id = " + $VAR)
-    meta
-      owasp: ["A03:2024-Injection"]
-      cwe: ["CWE-89"]
-```
-
-***
-
-## **Интеграция**
-
-### CI/CD 
-
-```yaml
-- name: Run Semgrep Scan
-  run: make scan-ci
-
-- name: Upload results
-  uses: actions/upload-artifact@v4
-  with:
-    name: semgrep-report
-    path: reports/semgrep.json
-```
-
-### Pre-commit hook
-
-```bash
-# .git/hooks/pre-commit
-#!/bin/sh
-make scan-critical || exit 1
-```
-
-***
-
 ## **Troubleshooting**
 
 ```bash
@@ -208,20 +87,6 @@ $ git sparse-checkout set java
 $ cd rules/official-java-semgrep
 $ git sparse-checkout reapply
 $ git reset --hard HEAD
-```
-
-***
-
-## **Metrics**
-
-```bash
-$ make stats # Количество правил
-
-# История изменений правил
-$ cd rules/official-java-semgrep
-$ git log --oneline -10 -- java/
-
-$ semgrep --config rules/ src/ --json | jq '.results | group_by(.extra.severity) | map({severity: ..extra.severity, count: length})' # Количество находок по severity
 ```
 
 ***
