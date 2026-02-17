@@ -1,7 +1,7 @@
 
 ## Ruleset
 
-### **A01:2024 – Broken Access Controll (IDOR)**
+### **A01:2025 – Broken Access Controll (IDOR)**
 
 > - IDOR (Insecure Direct Object References)
 > - Missing Authorization (@PreAuthorize, @Secured)
@@ -20,7 +20,7 @@
 > - Multi-tenancy
 > - Default Credentials, Rate Limiting, Error Messages
 
-### **A02:2024 – Cryptographic Failures**
+### **A04:2025 – Cryptographic Failures**
 
 > - Слабые алгоритмы хеширования (MD5, SHA1)
 > - Слабое шифрование (DES, RC4, Blowfish, ECB)
@@ -37,7 +37,7 @@
 > - Backup и экспорт данных
 > - Mobile и API безопасность
 
-### **A03:2024 – Injection (SQL/OS/Expression)**
+### **A05:2025 – Injection (SQL/OS/Expression)**
 
 > - SQL Injection (JDBC, JPA, Hibernate, Spring Data, MyBatis)
 > - NoSQL Injection (MongoDB)

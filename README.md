@@ -20,9 +20,9 @@
 
 Проект посвящен автоматизированному сканированию Java-кода на уязвимости с использованием официальных и кастомных правил Semgrep. 
 
-Проект использует официальные Java правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules) путем использования git submodule. Кастомные правила лежат в `rules/custom/`, которые построены на базе **OWASP TOP 10 - 2024**. Отчеты формируются в форматах SARIF, JSON.
+Проект использует официальные Java правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules) путем использования git submodule. Кастомные правила лежат в `rules/custom/`, которые построены на базе **OWASP TOP 10 - 2025**. Отчеты формируются в форматах SARIF, JSON.
 
-## Возможности
+## **Возможности**
 
 - **Официальные правила Community** — автоматически обновляемые правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules)
 - **Кастомные правила** — расширенный набор правил дополняющих официальные и не требующие дополнительной лицензии
@@ -31,7 +31,20 @@
 - **Отчёты** — JSON и SARIF форматы для интеграции с CI/CD
 - **Быстрый старт** — всё настроено через Makefile, готово к использованию из коробки
 
-## Сопроводительная информация
+## **Категории:**
+
+- A01:2025 – Broken Access Control (Нарушение контроля доступа)
+- A02:2025 – Security Misconfiguration (Неправильная конфигурация)
+- A03:2025 – Software Supply Chain Failures (Сбои цепочки поставок ПО)
+- A04:2025 – Cryptographic Failures (Криптографические сбои)
+- A05:2025 – Injection (Инъекции)
+- A06:2025 – Insecure Design (Небезопасный дизайн)
+- A07:2025 – Authentication Failures (Сбои аутентификации)
+- A08:2025 – Software or Data Integrity Failures (Сбои целостности)
+- A09:2025 – Security Logging & Alerting Failures (Сбои логирования)
+- A10:2025 – Mishandling of Exceptional Conditions (Неправильная обработка исключений)
+
+## **Сопроводительная информация**
 
 - [JAVA правила](assets/docs/ruleset.md)
 - [Manual](assets/docs/manual.md)
