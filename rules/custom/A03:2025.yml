@@ -1,1 +1,1057 @@
 # A03:2025 – Software Supply Chain Failures
+
+rules:
+  # Уязвимые и устаревшие зависимости
+  
+  - id: log4j-vulnerable-version
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-core</artifactId>
+                <version>2.0</version>
+              </dependency>
+          - pattern: |
+              implementation("org.apache.logging.log4j:log4j-core:2.0")
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^2\\.(0|1[0-4])(\\.[0-9]+)?$"
+    message: |
+      Используется уязвимая версия Log4j (<2.15.0). CVE-2021-44228 (Log4Shell)
+      позволяет удалённое выполнение кода через JNDI lookup. Обновите до версии
+      2.17.1 или выше немедленно.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-502
+      owasp: A03:2025 - Software Supply Chain Failures
+      cve: CVE-2021-44228
+      references:
+        - https://owasp.org/Top10/A03_2025-Software_Supply_Chain_Failures/
+
+  - id: spring-framework-vulnerable-version
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-core</artifactId>
+                <version>$VERSION</version>
+              </dependency>
+          - pattern: |
+              implementation("org.springframework:spring-core:$VERSION")
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^5\\.[0-2]\\."
+    message: |
+      Используется уязвимая версия Spring Framework (<5.3.18). CVE-2022-22965
+      (Spring4Shell) позволяет RCE через data binding. Обновите до 5.3.18+ или 5.2.20+.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-94
+      owasp: A03:2025 - Software Supply Chain Failures
+      cve: CVE-2022-22965
+
+  - id: jackson-databind-vulnerable-version
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>$VERSION</version>
+              </dependency>
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^2\\.[0-9]\\."
+    message: |
+      Используется потенциально уязвимая версия Jackson Databind. Множественные
+      CVE по десериализации (CVE-2020-36518 и др.). Обновите до последней версии
+      2.15.x или выше и отключите default typing.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-502
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: commons-collections-vulnerable
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>commons-collections</groupId>
+                <artifactId>commons-collections</artifactId>
+                <version>$VERSION</version>
+              </dependency>
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^3\\."
+    message: |
+      Используется commons-collections 3.x с известными уязвимостями десериализации.
+      Позволяет RCE через crafted serialized objects. Мигрируйте на commons-collections4
+      версии 4.1 или выше.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-502
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: struts-vulnerable-version
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>org.apache.struts</groupId>
+                <artifactId>struts2-core</artifactId>
+                <version>$VERSION</version>
+              </dependency>
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^2\\.[0-4]\\."
+    message: |
+      Используется критически уязвимая версия Apache Struts 2 (<2.5.0). Множественные
+      CVE по RCE через OGNL injection (CVE-2017-5638 и др.). Обновите до 2.5.30+ или
+      мигрируйте на Spring MVC.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-94
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: mysql-connector-vulnerable
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>$VERSION</version>
+              </dependency>
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^[5-7]\\."
+    message: |
+      Используется устаревший mysql-connector-java. Мигрируйте на com.mysql:mysql-connector-j
+      версии 8.0.33+. Старые версии содержат уязвимости и больше не поддерживаются.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: guava-vulnerable-version
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>$VERSION</version>
+              </dependency>
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^(1[0-9]|2[0-4])\\."
+    message: |
+      Используется устаревшая версия Guava (<25.0). Содержит уязвимости, включая
+      DoS через unbounded cache. Обновите до версии 32.0.0 или выше.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-770
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: snakeyaml-vulnerable-version
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>org.yaml</groupId>
+                <artifactId>snakeyaml</artifactId>
+                <version>$VERSION</version>
+              </dependency>
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^1\\.(0|1[0-9]|2[0-9]|3[0-2])$"
+    message: |
+      Используется уязвимая версия SnakeYAML (<1.33). CVE-2022-1471 позволяет RCE
+      через десериализацию YAML. Обновите до 2.0 или выше и настройте SafeConstructor.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-502
+      owasp: A03:2025 - Software Supply Chain Failures
+      cve: CVE-2022-1471
+
+  - id: okhttp-vulnerable-version
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>$VERSION</version>
+              </dependency>
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^[3-4]\\.[0-9]\\."
+    message: |
+      Используется устаревшая версия OkHttp (<4.10.0). Может содержать уязвимости
+      в TLS handshake и certificate pinning. Обновите до последней 4.x версии.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: dependency-without-version
+    pattern-either:
+      - pattern: |
+          <dependency>
+            <groupId>$GROUP</groupId>
+            <artifactId>$ARTIFACT</artifactId>
+          </dependency>
+      - pattern: |
+          implementation("$GROUP:$ARTIFACT")
+    message: |
+      Зависимость без указания версии. Это приводит к непредсказуемым сборкам и
+      может подтянуть уязвимую версию. Всегда указывайте конкретную версию для
+      воспроизводимых и безопасных сборок.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  # Dependency Confusion / Typosquatting
+
+  - id: suspicious-dependency-name-typo
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <dependency>
+                <groupId>$GROUP</groupId>
+                <artifactId>$ARTIFACT</artifactId>
+              </dependency>
+      - meta:variable-regex:
+          meta:variable: $ARTIFACT
+          regex: "(springboot|apring|sprng|jakson|guva|comons|apche)"
+    message: |
+      Подозрительное имя зависимости - возможен typosquatting. Проверьте правильность
+      написания: spring-boot, jackson, guava, commons, apache. Typosquatting атаки
+      используют опечатки для внедрения вредоносного кода.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-1104
+
+  - id: public-repository-before-private
+    patterns:
+      - pattern: |
+          <repositories>
+            <repository>
+              <id>$PUBLIC</id>
+              <url>https://repo.maven.apache.org/maven2</url>
+            </repository>
+            ...
+            <repository>
+              <id>$PRIVATE</id>
+              <url>$PRIVATE_URL</url>
+            </repository>
+          </repositories>
+    message: |
+      Публичный репозиторий Maven Central указан перед приватным. Это создаёт риск
+      dependency confusion - атакующий может загрузить пакет с тем же именем в
+      публичный репозиторий. Размещайте приватные репозитории первыми.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-829
+
+  - id: gradle-repository-order-unsafe
+    patterns:
+      - pattern: |
+          repositories {
+            mavenCentral()
+            ...
+            maven { url "$PRIVATE_REPO" }
+          }
+    message: |
+      MavenCentral() указан перед приватным репозиторием в Gradle. Риск dependency
+      confusion атаки. Размещайте приватные репозитории перед публичными для
+      приоритета внутренних пакетов.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-829
+
+  - id: snapshot-dependency-in-production
+    pattern-either:
+      - pattern: |
+          <dependency>
+            <groupId>$GROUP</groupId>
+            <artifactId>$ARTIFACT</artifactId>
+            <version>$VERSION-SNAPSHOT</version>
+          </dependency>
+      - pattern: |
+          implementation("$GROUP:$ARTIFACT:$VERSION-SNAPSHOT")
+    message: |
+      SNAPSHOT зависимость в production коде. SNAPSHOT версии нестабильны, могут
+      меняться без предупреждения и не гарантируют целостность. Используйте только
+      release версии (без SNAPSHOT) в production.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  - id: dependency-from-untrusted-repository
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <repository>
+                <url>http://$HOST</url>
+              </repository>
+          - pattern: |
+              maven { url "http://$HOST" }
+      - meta:variable-regex:
+          meta:variable: $HOST
+          regex: "(?!repo\\.maven\\.apache\\.org|repo1\\.maven\\.org|central\\.sonatype\\.com).*"
+    message: |
+      Зависимость загружается через HTTP (не HTTPS) из недоверенного репозитория.
+      Позволяет MITM атаки и подмену пакетов. Используйте только HTTPS и доверенные
+      репозитории (Maven Central, JCenter, корпоративный Nexus/Artifactory).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-319
+
+  - id: wildcard-dependency-version
+    pattern-either:
+      - pattern: |
+          <version>+</version>
+      - pattern: |
+          <version>*</version>
+      - pattern: |
+          implementation("$GROUP:$ARTIFACT:+")
+    message: |
+      Wildcard версия зависимости (+, *, LATEST). Автоматически подтягивает новые
+      версии, что может внести уязвимости или breaking changes. Всегда указывайте
+      конкретную версию для безопасности и стабильности.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  - id: maven-central-insecure-protocol
+    pattern: |
+      <repository>
+        <url>http://repo.maven.apache.org/maven2</url>
+      </repository>
+    message: |
+      Maven Central репозиторий использует HTTP вместо HTTPS. Позволяет MITM атаки
+      и подмену зависимостей. Используйте: https://repo.maven.apache.org/maven2
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-319
+
+  - id: internal-package-public-name
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <groupId>com.mycompany</groupId>
+          - pattern: |
+              <groupId>com.test</groupId>
+          - pattern: |
+              <groupId>org.internal</groupId>
+      - pattern-not-inside: |
+          <distributionManagement>
+            <repository>
+              <url>$PRIVATE_REPO</url>
+            </repository>
+          </distributionManagement>
+    message: |
+      Внутренний пакет с generic именем без настроенного приватного репозитория.
+      Риск dependency confusion - атакующий может загрузить пакет с тем же именем
+      в Maven Central. Используйте уникальный groupId (например, обратный домен)
+      или настройте приватный репозиторий.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-829
+
+  # Отсутствие проверки целостности
+
+  - id: dependency-checksum-disabled
+    pattern-either:
+      - pattern: |
+          <maven.artifact.checksums.disabled>true</maven.artifact.checksums.disabled>
+      - pattern: |
+          systemProp.org.gradle.internal.publish.checksums.insecure=true
+    message: |
+      Проверка контрольных сумм зависимостей отключена. Это позволяет использовать
+      повреждённые или подменённые пакеты без обнаружения. Включите проверку
+      checksums для целостности supply chain.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-353
+
+  - id: maven-gpg-signature-verification-disabled
+    patterns:
+      - pattern: |
+          <configuration>
+            <skip>true</skip>
+          </configuration>
+      - pattern-inside: |
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            ...
+          </plugin>
+    message: |
+      GPG проверка подписей отключена в Maven. Пакеты не верифицируются на
+      подлинность, что позволяет использовать подделанные артефакты. Включите
+      GPG verification для критичных зависимостей.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-347
+
+  - id: gradle-verification-disabled
+    pattern: |
+      verification {
+        verifyMetadata = false
+        verifySignatures = false
+      }
+    message: |
+      Gradle dependency verification отключена. Отсутствует проверка meta:data и
+      подписей зависимостей. Включите verification в gradle/verification-meta:data.xml
+      для защиты от tampered packages.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-353
+
+  - id: checksum-algorithm-weak
+    pattern-either:
+      - pattern: |
+          <checksumAlgorithm>MD5</checksumAlgorithm>
+      - pattern: |
+          <checksumAlgorithm>SHA-1</checksumAlgorithm>
+    message: |
+      Используется слабый алгоритм контрольных сумм (MD5 или SHA-1). Эти алгоритмы
+      уязвимы к collision атакам. Используйте SHA-256 или SHA-512 для проверки
+      целостности зависимостей.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-327
+
+  - id: no-dependency-lock-file
+    patterns:
+      - pattern-not: |
+          dependencyLocking {
+            lockAllConfigurations()
+          }
+      - pattern-inside: |
+          plugins {
+            ...
+          }
+    message: |
+      Dependency locking не настроен в Gradle. Без lock файла сборки непредсказуемы
+      и могут подтянуть разные версии зависимостей. Включите: dependencyLocking
+      и сгенерируйте gradle.lockfile для reproducible builds.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  - id: maven-without-dependency-plugin
+    patterns:
+      - pattern-not-inside: |
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-dependency-plugin</artifactId>
+            ...
+          </plugin>
+      - pattern-inside: |
+          <build>
+            <plugins>
+              ...
+            </plugins>
+          </build>
+    message: |
+      maven-dependency-plugin не настроен. Без него нет анализа неиспользуемых
+      зависимостей и дублирующихся версий. Добавьте plugin с goal analyze для
+      выявления избыточных зависимостей, уменьшающих attack surface.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: gradle-cache-without-integrity-check
+    pattern: |
+      buildCache {
+        local {
+          enabled = true
+        }
+      }
+    message: |
+      Gradle build cache включён без проверки целостности. Кэш может быть отравлен
+      скомпрометированными артефактами. Используйте remote cache с checksums или
+      регулярно очищайте локальный кэш.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: jar-downloaded-without-signature-check
+    patterns:
+      - pattern: |
+          URL $URL = new URL($JAR_URL);
+          ...
+          InputStream $IS = $URL.openStream();
+      - pattern-not-inside: |
+          Signature $SIG = Signature.getInstance(...);
+          ...
+          $SIG.verify(...);
+    message: |
+      JAR файл загружается по URL без проверки цифровой подписи. Загруженный JAR
+      может быть вредоносным. Всегда проверяйте подпись JAR перед загрузкой через
+      java.security.Signature или используйте dependency management.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  # CI/CD Pipeline Security
+
+  - id: secrets-in-pom-xml
+    patterns:
+      - pattern-either:
+          - pattern: |
+              <password>$PASS</password>
+          - pattern: |
+              <token>$TOKEN</token>
+          - pattern: |
+              <apiKey>$KEY</apiKey>
+      - meta:variable-pattern:
+          meta:variable: $PASS
+          pattern-not: ${...}
+      - meta:variable-pattern:
+          meta:variable: $TOKEN
+          pattern-not: ${...}
+      - meta:variable-pattern:
+          meta:variable: $KEY
+          pattern-not: ${...}
+    message: |
+      Секреты (пароли, токены, API ключи) захардкожены в pom.xml. Они будут
+      раскрыты в системе контроля версий. Используйте переменные окружения или
+      Maven settings.xml с encrypted passwords.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-798
+
+  - id: gradle-properties-credentials
+    pattern-either:
+      - pattern: |
+          mavenUser=$USER
+          mavenPassword=$PASS
+      - pattern: |
+          artifactoryUser=$USER
+          artifactoryPassword=$PASS
+    message: |
+      Учётные данные в gradle.properties. Этот файл может попасть в Git. Используйте
+      gradle.properties в ~/.gradle/ (не в проекте) или переменные окружения для
+      безопасного хранения credentials.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-798
+
+  - id: insecure-ci-script-execution
+    pattern-either:
+      - pattern: |
+          exec("curl $URL | bash")
+      - pattern: |
+          exec("wget -O - $URL | sh")
+      - pattern: |
+          Runtime.getRuntime().exec("curl $URL | bash");
+    message: |
+      CI/CD скрипт выполняется через curl|bash без проверки. Скомпрометированный
+      URL приводит к RCE в build environment. Всегда загружайте скрипты, проверяйте
+      checksum и затем выполняйте.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  - id: build-script-downloads-binary
+    patterns:
+      - pattern: |
+          URL $URL = new URL("http://$HOST/$BINARY");
+          ...
+          FileOutputStream $FOS = new FileOutputStream($FILE);
+      - meta:variable-regex:
+          meta:variable: $BINARY
+          regex: ".*\\.(jar|exe|sh|bin|dll)$"
+    message: |
+      Build скрипт загружает бинарный файл по HTTP. Это позволяет MITM атаки и
+      внедрение вредоносного кода в сборку. Используйте HTTPS и проверяйте checksum
+      загруженных файлов.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  - id: dockerfile-copies-all-files
+    pattern: |
+      COPY . /app
+    message: |
+      Dockerfile копирует все файлы проекта в образ (COPY . /app). Это может включить
+      .git/, credentials, build artifacts. Используйте .dockerignore или копируйте
+      только необходимые файлы для минимизации attack surface.
+    severity: WARNING
+    languages: [dockerfile]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: docker-image-from-untrusted-registry
+    patterns:
+      - pattern: |
+          FROM $IMAGE
+      - meta:variable-regex:
+          meta:variable: $IMAGE
+          regex: "(?!docker\\.io/library/|gcr\\.io/|mcr\\.microsoft\\.com/).*"
+    message: |
+      Docker образ из недоверенного registry. Образы из неизвестных источников могут
+      содержать backdoors, malware. Используйте только официальные образы (Docker Hub
+      Official, GCR, MCR) или корпоративный registry с vulnerability scanning.
+    severity: WARNING
+    languages: [dockerfile]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: github-actions-uses-tag-not-sha
+    patterns:
+      - pattern: |
+          uses: $ACTION@$VERSION
+      - meta:variable-regex:
+          meta:variable: $VERSION
+          regex: "^v[0-9]+"
+      - pattern-not: |
+          uses: $ACTION@$SHA
+      - meta:variable-regex:
+          meta:variable: $SHA
+          regex: "^[a-f0-9]{40}$"
+    message: |
+      GitHub Action использует tag (v1, v2) вместо конкретного commit SHA. Tag может
+      быть перемещён на вредоносный код. Используйте полный SHA commit для
+      immutability: uses: actions/checkout@a81bbbf8298c0fa03ea29cdc473d45769f953675
+    severity: WARNING
+    languages: [yaml]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: maven-deploy-without-gpg-signing
+    patterns:
+      - pattern-inside: |
+          <plugin>
+            <artifactId>maven-deploy-plugin</artifactId>
+            ...
+          </plugin>
+      - pattern-not-inside: |
+          <plugin>
+            <artifactId>maven-gpg-plugin</artifactId>
+            ...
+          </plugin>
+    message: |
+      Maven deploy настроен без GPG подписи артефактов. Опубликованные артефакты
+      не могут быть верифицированы пользователями. Добавьте maven-gpg-plugin для
+      подписи releases перед публикацией.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-347
+
+  # SBOM и Visibility
+
+  - id: missing-sbom-generation
+    patterns:
+      - pattern-not-inside: |
+          <plugin>
+            <groupId>org.cyclonedx</groupId>
+            <artifactId>cyclonedx-maven-plugin</artifactId>
+            ...
+          </plugin>
+      - pattern-inside: |
+          <build>
+            <plugins>
+              ...
+            </plugins>
+          </build>
+    message: |
+      SBOM (Software Bill of Materials) не генерируется. Без SBOM невозможно быстро
+      идентифицировать уязвимые компоненты при CVE. Добавьте CycloneDX или SPDX
+      plugin для автоматической генерации SBOM.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      references:
+        - https://cyclonedx.org/
+
+  - id: no-dependency-check-plugin
+    patterns:
+      - pattern-not-inside: |
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            ...
+          </plugin>
+      - pattern-inside: |
+          <build>
+            <plugins>
+              ...
+            </plugins>
+          </build>
+    message: |
+      OWASP Dependency-Check plugin не настроен. Уязвимости в зависимостях не
+      сканируются автоматически. Добавьте dependency-check-maven для регулярного
+      аудита CVE в зависимостях.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      references:
+        - https://owasp.org/www-project-dependency-check/
+
+  - id: gradle-without-sbom-plugin
+    patterns:
+      - pattern-not: |
+          id("org.cyclonedx.bom")
+      - pattern-inside: |
+          plugins {
+            ...
+          }
+    message: |
+      CycloneDX SBOM plugin не настроен в Gradle. SBOM необходим для отслеживания
+      компонентов и быстрого реагирования на CVE. Добавьте: id("org.cyclonedx.bom")
+      version "1.7.4" в plugins блок.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: transitive-dependencies-not-analyzed
+    patterns:
+      - pattern-inside: |
+          <dependencies>
+            ...
+          </dependencies>
+      - pattern-not-inside: |
+          <plugin>
+            <artifactId>maven-dependency-plugin</artifactId>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>tree</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+    message: |
+      Транзитивные зависимости не анализируются. Уязвимости могут быть скрыты в
+      зависимостях зависимостей. Используйте dependency:tree для визуализации и
+      регулярно проверяйте транзитивные зависимости на CVE.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: no-license-compliance-check
+    patterns:
+      - pattern-not-inside: |
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>license-maven-plugin</artifactId>
+            ...
+          </plugin>
+      - pattern-inside: |
+          <build>
+            <plugins>
+              ...
+            </plugins>
+          </build>
+    message: |
+      Проверка лицензий зависимостей не настроена. Несовместимые лицензии (GPL в
+      proprietary продукте) создают юридические риски. Добавьте license-maven-plugin
+      для автоматической проверки совместимости лицензий.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  # Runtime Dependency Loading
+
+  - id: dynamic-class-loading-from-url
+    patterns:
+      - pattern: |
+          URLClassLoader $CL = new URLClassLoader(new URL[]{new URL($URL)});
+          ...
+          $CL.loadClass($CLASS);
+    message: |
+      Динамическая загрузка классов по URL. Если URL скомпрометирован, это приводит
+      к загрузке и выполнению вредоносного кода. Загружайте классы только из
+      доверенных источников и проверяйте integrity загруженных JAR.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  - id: maven-dependency-resolution-at-runtime
+    patterns:
+      - pattern: |
+          Aether $AETHER = ...;
+          ...
+          $AETHER.resolveArtifact(...);
+    message: |
+      Runtime resolution зависимостей через Aether/Maven. Зависимости должны быть
+      разрешены на этапе сборки. Runtime resolution увеличивает attack surface и
+      может загрузить скомпрометированные версии.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: groovy-grape-dependency-loading
+    pattern: |
+      @Grab(group='$GROUP', module='$MODULE', version='$VERSION')
+    message: |
+      Groovy @Grab загружает зависимости в runtime. Это обходит build-time
+      dependency scanning и проверку целостности. Избегайте @Grab в production,
+      используйте стандартный dependency management.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: plugin-loaded-from-external-source
+    patterns:
+      - pattern: |
+          Plugin $P = PluginLoader.load($URL);
+      - meta:variable-regex:
+          meta:variable: $URL
+          regex: "^https?://.*"
+    message: |
+      Plugin загружается из внешнего источника в runtime. Скомпрометированный plugin
+      получает полный доступ к приложению. Используйте pre-approved plugin marketplace
+      с code signing и review процессом.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  - id: javaagent-from-untrusted-source
+    pattern: |
+      java -javaagent:$PATH
+    message: |
+      Java agent загружается из неизвестного источника. Agent имеет полный доступ к
+      JVM и может модифицировать bytecode всех классов. Используйте только доверенные
+      agents с проверенными checksums.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  - id: osgi-bundle-dynamic-install
+    patterns:
+      - pattern: |
+          BundleContext $CTX = ...;
+          ...
+          $CTX.installBundle($LOCATION);
+      - meta:variable-regex:
+          meta:variable: $LOCATION
+          regex: "^https?://.*"
+    message: |
+      OSGi bundle устанавливается динамически из URL. Bundle получает доступ к
+      OSGi framework и может компрометировать систему. Устанавливайте только bundles
+      из доверенного repository с signature verification.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-494
+
+  # Build Tool Configuration
+
+  - id: maven-settings-insecure-repository
+    patterns:
+      - pattern-inside: |
+          <settings>
+            <mirrors>
+              ...
+            </mirrors>
+          </settings>
+      - pattern: |
+          <mirror>
+            <url>http://$HOST</url>
+          </mirror>
+    message: |
+      Maven mirror настроен с HTTP вместо HTTPS. Все зависимости проходят через этот
+      mirror и могут быть перехвачены. Используйте только HTTPS mirrors для защиты
+      от MITM атак в supply chain.
+    severity: ERROR
+    languages: [xml]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-319
+
+  - id: gradle-wrapper-without-checksum-verification
+    patterns:
+      - pattern-not: |
+          distributionSha256Sum=$CHECKSUM
+      - pattern-inside: |
+          gradle-wrapper.properties
+    message: |
+      Gradle wrapper без проверки SHA-256 checksum. Скомпрометированный
+      gradle-wrapper.jar может выполнить вредоносный код. Добавьте
+      distributionSha256Sum в gradle-wrapper.properties.
+    severity: ERROR
+    languages: [properties]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      cwe: CWE-353
+
+  - id: maven-enforcer-missing
+    patterns:
+      - pattern-not-inside: |
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            ...
+          </plugin>
+      - pattern-inside: |
+          <build>
+            <plugins>
+              ...
+            </plugins>
+          </build>
+    message: |
+      Maven Enforcer Plugin не настроен. Без него нет контроля версий зависимостей,
+      конфликтов версий, минимальных версий Maven/JDK. Добавьте enforcer для
+      предотвращения несовместимых зависимостей.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: gradle-init-script-in-project
+    pattern: |
+      init.gradle
+    message: |
+      Gradle init script находится в репозитории проекта. Init scripts выполняются
+      перед build и имеют полный доступ. Если проект скомпрометирован, init script
+      может внедрить malware. Используйте init scripts только из ~/.gradle/init.d/
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+
+  - id: build-reproducibility-not-configured
+    patterns:
+      - pattern-not-inside: |
+          <plugin>
+            <artifactId>maven-artifact-plugin</artifactId>
+            <configuration>
+              <buildinfo>true</buildinfo>
+            </configuration>
+          </plugin>
+      - pattern-inside: |
+          <build>
+            <plugins>
+              ...
+            </plugins>
+          </build>
+    message: |
+      Reproducible builds не настроены. Без reproducibility невозможно верифицировать,
+      что опубликованный артефакт соответствует исходному коду. Настройте buildinfo
+      для обеспечения reproducible builds.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A03:2025 - Software Supply Chain Failures
+      references:
+        - https://reproducible-builds.org/
