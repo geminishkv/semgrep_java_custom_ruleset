@@ -1,1 +1,1104 @@
   # A02:2025 – Security Misconfiguration
+
+  rules:
+  # Spring Boot Неправильные конфигурации
+  
+  - id: spring-actuator-security-disabled
+    patterns:
+      - pattern-either:
+          - pattern: management.security.enabled=false
+          - pattern: management.endpoints.web.exposure.include=*
+          - pattern: |
+              @Configuration
+              class $CLASS {
+                ...
+                management.security.enabled($VAL)
+                ...
+              }
+          - meta:variable-pattern:
+              meta:variable: $VAL
+              pattern: "false"
+    message: |
+      Spring Boot Actuator endpoints открыты без аутентификации. Это позволяет
+      получить доступ к /actuator/heapdump, /actuator/env, /actuator/metrics без
+      авторизации, что приводит к утечке конфиденциальной конфигурации, переменных
+      окружения и heap dumps. Установите management.security.enabled=true.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-16
+      owasp: A02:2025 - Security Misconfiguration
+      references:
+        - https://owasp.org/Top10/A02_2025-Security_Misconfiguration/
+
+  - id: spring-boot-debug-enabled
+    pattern-either:
+      - pattern: |
+          debug=true
+      - pattern: |
+          logging.level.root=DEBUG
+      - pattern: |
+          @SpringBootApplication
+          class $APP {
+            ...
+            public static void main(...) {
+              ...
+              SpringApplication.run(...).setLogLevel("DEBUG");
+              ...
+            }
+          }
+    message: |
+      Режим отладки включён в Spring Boot приложении. Это приводит к выводу
+      детальных сообщений об ошибках, стек-трейсов и внутренней структуры
+      приложения в production. Установите debug=false и используйте уровень
+      логирования INFO или WARN в production.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-209
+
+  - id: spring-csrf-disabled
+    patterns:
+      - pattern-inside: |
+          @Configuration
+          class $CONFIG extends WebSecurityConfigurerAdapter { ... }
+      - pattern-either:
+          - pattern: |
+              http.csrf().disable()
+          - pattern: |
+              $HTTP.csrf().disable()
+    message: |
+      CSRF защита отключена глобально. Это позволяет атакующим подделывать запросы
+      от имени аутентифицированных пользователей. Отключайте CSRF только для
+      stateless API с токенами. Для session-based приложений оставьте CSRF включённым.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-352
+
+  - id: spring-cors-allow-all-origins
+    pattern-either:
+      - pattern: |
+          @CrossOrigin(origins = "*")
+      - pattern: |
+          registry.addMapping(...).allowedOrigins("*")
+      - pattern: |
+          @CrossOrigin("*")
+    message: |
+      CORS настроен на разрешение всех источников (*). Это позволяет любому сайту
+      отправлять запросы к вашему API. Укажите конкретные разрешённые источники
+      вместо wildcard.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-942
+
+  - id: spring-cors-credentials-with-wildcard
+    patterns:
+      - pattern: |
+          registry.addMapping(...)
+            .allowedOriginPatterns("*")
+            .allowCredentials(true)
+      - pattern-not: |
+          registry.addMapping(...)
+            .allowedOrigins($SPECIFIC)
+            .allowCredentials(true)
+    message: |
+      CORS разрешает credentials с wildcard источником. Это нарушение безопасности,
+      которое позволяет любому домену украсть учётные данные пользователя через XSS.
+      Укажите конкретные домены при использовании allowCredentials(true).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-942
+
+  - id: spring-security-permit-all-endpoints
+    patterns:
+      - pattern-inside: |
+          @Configuration
+          class $CONFIG extends WebSecurityConfigurerAdapter { ... }
+      - pattern: |
+          http.authorizeRequests().anyRequest().permitAll()
+    message: |
+      Все endpoints настроены с permitAll() - аутентификация не требуется. Это
+      открывает всё приложение без контроля доступа. Используйте authenticated()
+      или проверки ролей для защищённых ресурсов.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-306
+
+  - id: spring-h2-console-enabled
+    pattern-either:
+      - pattern: |
+          spring.h2.console.enabled=true
+      - pattern: |
+          @Configuration
+          class $CONFIG {
+            ...
+            h2Console().enabled(true)
+            ...
+          }
+    message: |
+      Консоль H2 базы данных включена. Это предоставляет web-интерфейс для
+      выполнения SQL и просмотра базы данных. Должна быть отключена в production,
+      так как позволяет неавторизованный доступ к БД по адресу /h2-console.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-489
+
+  - id: spring-show-sql-enabled
+    pattern: |
+      spring.jpa.show-sql=true
+    message: |
+      JPA настроена на логирование всех SQL запросов. Это раскрывает структуру
+      базы данных, паттерны запросов и потенциально конфиденциальные данные в
+      логах. Отключите в production: spring.jpa.show-sql=false
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-532
+
+  - id: spring-error-include-stacktrace
+    pattern-either:
+      - pattern: |
+          server.error.include-stacktrace=always
+      - pattern: |
+          server.error.include-exception=true
+      - pattern: |
+          server.error.include-message=always
+    message: |
+      Spring Boot настроен на включение стек-трейсов в ответы об ошибках. Это
+      раскрывает внутреннюю структуру приложения, пути к файлам, версии библиотек
+      атакующим. Установите 'never' в production.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-209
+
+  - id: spring-default-password
+    patterns:
+      - pattern-either:
+          - pattern: |
+              spring.security.user.password=$PASS
+          - pattern: |
+              @Bean
+              public UserDetailsService users() {
+                ...
+                User.withDefaultPasswordEncoder()...password($PASS)...
+                ...
+              }
+      - meta:variable-pattern:
+          meta:variable: $PASS
+          patterns:
+            - pattern-either:
+                - pattern: '"password"'
+                - pattern: '"admin"'
+                - pattern: '"123456"'
+                - pattern: '"password123"'
+                - pattern: '"admin123"'
+    message: |
+      Spring Security настроен с дефолтным/слабым паролем. Это позволяет тривиальный
+      обход аутентификации. Используйте сильные пароли из переменных окружения
+      или систем управления секретами.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-798
+
+  - id: spring-session-fixation-none
+    patterns:
+      - pattern-inside: |
+          @Configuration
+          class $CONFIG extends WebSecurityConfigurerAdapter { ... }
+      - pattern: |
+          http.sessionManagement().sessionFixation().none()
+    message: |
+      Защита от фиксации сессии отключена. Атакующий может захватить сессию
+      пользователя, зафиксировав session ID до аутентификации. Используйте
+      newSession() или migrateSession() для защиты от фиксации сессии.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-384
+
+  - id: spring-remember-me-weak-key
+    patterns:
+      - pattern: |
+          http.rememberMe().key($KEY)
+      - meta:variable-pattern:
+          meta:variable: $KEY
+          patterns:
+            - pattern-either:
+                - pattern: '"key"'
+                - pattern: '"secret"'
+                - pattern: '"remember"'
+                - pattern: '"remember-me"'
+            - pattern-not: System.getenv(...)
+    message: |
+      Функция remember-me настроена с захардкоженным слабым ключом. Это позволяет
+      атакующим подделывать remember-me токены. Используйте сильный случайный ключ
+      из переменной окружения: System.getenv("REMEMBER_ME_KEY")
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-321
+
+  - id: spring-boot-devtools-enabled
+    pattern-either:
+      - pattern: |
+          <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+          </dependency>
+      - pattern: |
+          implementation("org.springframework.boot:spring-boot-devtools")
+    message: |
+      Зависимость Spring Boot DevTools включена. Это активирует auto-restart,
+      LiveReload и функции удалённой отладки, которых не должно быть в production.
+      Добавьте <scope>runtime</scope> или исключите из production сборок.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-489
+
+  - id: spring-security-http-basic-without-https
+    patterns:
+      - pattern-inside: |
+          @Configuration
+          class $CONFIG extends WebSecurityConfigurerAdapter { ... }
+      - pattern: |
+          http.httpBasic()
+      - pattern-not-inside: |
+          http.requiresChannel().anyRequest().requiresSecure()
+    message: |
+      HTTP Basic аутентификация включена без принудительного HTTPS. Учётные данные
+      передаются в Base64 (легко декодируется). Добавьте requiresSecure() или
+      используйте OAuth2.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-319
+
+  - id: spring-management-port-same-as-app
+    pattern-either:
+      - pattern: |
+          management.server.port=${server.port}
+      - pattern-not: |
+          management.server.port=$PORT
+    message: |
+      Management endpoints на том же порту, что и приложение. Это открывает
+      /actuator/* для публичного трафика. Используйте отдельный management порт,
+      доступный только из внутренней сети: management.server.port=9090
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-16
+
+  # Уязвимости XML парсеров
+
+  - id: xxe-documentbuilder-no-protection
+    patterns:
+      - pattern: |
+          DocumentBuilderFactory $DBF = DocumentBuilderFactory.newInstance();
+          ...
+          $DBF.newDocumentBuilder()
+      - pattern-not-inside: |
+          $DBF.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      - pattern-not-inside: |
+          $DBF.setFeature("http://xml.org/sax/features/external-general-entities", false);
+    message: |
+      DocumentBuilderFactory создана без защиты от XXE. Конфигурация по умолчанию
+      позволяет атаки XML External Entity, ведущие к раскрытию файлов, SSRF, DoS.
+      Отключите внешние сущности и DTD.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-611
+
+  - id: xxe-saxparser-no-protection
+    patterns:
+      - pattern: |
+          SAXParserFactory $SPF = SAXParserFactory.newInstance();
+          ...
+          $SPF.newSAXParser()
+      - pattern-not-inside: |
+          $SPF.setFeature("http://xml.org/sax/features/external-general-entities", false);
+    message: |
+      SAXParserFactory без защиты от XXE. Уязвима к атакам XML External Entity.
+      Отключите внешние сущности: setFeature("external-general-entities", false)
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-611
+
+  - id: xxe-xmlreader-no-protection
+    patterns:
+      - pattern: |
+          XMLReader $READER = XMLReaderFactory.createXMLReader();
+      - pattern-not-inside: |
+          $READER.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+    message: |
+      XMLReader создан без защиты от XXE. Установите security features для
+      предотвращения обработки внешних сущностей.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-611
+
+  - id: xxe-transformer-no-protection
+    patterns:
+      - pattern: |
+          TransformerFactory $TF = TransformerFactory.newInstance();
+          ...
+          $TF.newTransformer()
+      - pattern-not-inside: |
+          $TF.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+      - pattern-not-inside: |
+          $TF.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+    message: |
+      TransformerFactory без безопасной обработки. Уязвима к XXE и XSLT injection.
+      Включите безопасную обработку и отключите доступ к внешним DTD.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-611
+
+  - id: xxe-unmarshaller-no-protection
+    patterns:
+      - pattern: |
+          Unmarshaller $U = $CONTEXT.createUnmarshaller();
+      - pattern-not-inside: |
+          $U.setProperty("jaxb.encoding", "UTF-8");
+          ...
+          $DBF.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+    message: |
+      JAXB Unmarshaller без защиты от XXE. При обработке внешнего XML настройте
+      базовый парсер с security features.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-611
+
+  # Security Headers
+
+  - id: missing-content-security-policy
+    patterns:
+      - pattern-inside: |
+          @Configuration
+          class $CONFIG extends WebSecurityConfigurerAdapter { ... }
+      - pattern: |
+          http.headers()
+      - pattern-not-inside: |
+          http.headers().contentSecurityPolicy(...)
+    message: |
+      Content Security Policy (CSP) заголовок не настроен. Это позволяет XSS атаки
+      через inline скрипты. Добавьте: http.headers().contentSecurityPolicy("...")
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-693
+
+  - id: x-frame-options-disabled
+    patterns:
+      - pattern-inside: |
+          @Configuration
+          class $CONFIG extends WebSecurityConfigurerAdapter { ... }
+      - pattern: |
+          http.headers().frameOptions().disable()
+    message: |
+      X-Frame-Options отключён. Приложение уязвимо к clickjacking атакам.
+      Используйте .sameOrigin() или .deny() для предотвращения встраивания в iframe.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-1021
+
+  - id: hsts-not-configured
+    patterns:
+      - pattern-inside: |
+          @Configuration
+          class $CONFIG extends WebSecurityConfigurerAdapter { ... }
+      - pattern: |
+          http.headers()
+      - pattern-not-inside: |
+          http.headers().httpStrictTransportSecurity()
+    message: |
+      HTTP Strict Transport Security (HSTS) не настроен. Пользователи могут быть
+      переведены на HTTP, что позволяет man-in-the-middle атаки. Включите HSTS с
+      длинным max-age: httpStrictTransportSecurity().maxAgeInSeconds(31536000)
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-523
+
+  - id: cache-control-missing-for-sensitive-data
+    patterns:
+      - pattern-inside: |
+          @RestController
+          class $CTRL { ... }
+      - pattern: |
+          @GetMapping(...)
+          public $TYPE $METHOD(...) {
+            ...
+            return $SENSITIVE;
+          }
+      - meta:variable-regex:
+          meta:variable: $METHOD
+          regex: "(get|fetch|retrieve)(User|Profile|Account|Password|Token|Credit|Payment)"
+      - pattern-not-inside: |
+          @GetMapping(...)
+          public ResponseEntity<?> $METHOD(...) {
+            ...
+            return ResponseEntity.ok()
+              .cacheControl(CacheControl.noStore())
+              ...
+          }
+    message: |
+      Endpoint с чувствительными данными без Cache-Control заголовков. Браузеры могут
+      кешировать конфиденциальную информацию. Добавьте: CacheControl.noStore() для
+      предотвращения кеширования.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-524
+
+  - id: x-content-type-options-missing
+    patterns:
+      - pattern-inside: |
+          @Configuration
+          class $CONFIG extends WebSecurityConfigurerAdapter { ... }
+      - pattern: |
+          http.headers()
+      - pattern-not-inside: |
+          http.headers().contentTypeOptions()
+    message: |
+      X-Content-Type-Options заголовок не установлен. Браузеры могут выполнять
+      MIME-sniffing ответов, ведущий к XSS. Включите: http.headers().contentTypeOptions()
+      для установки nosniff.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-693
+
+  # Управление сессиями
+
+  - id: session-timeout-too-long
+    patterns:
+      - pattern-either:
+          - pattern: |
+              server.servlet.session.timeout=$TIME
+          - pattern: |
+              session.setMaxInactiveInterval($SECONDS);
+      - meta:variable-comparison:
+          meta:variable: $TIME
+          comparison: $TIME > 3600
+      - meta:variable-comparison:
+          meta:variable: $SECONDS
+          comparison: $SECONDS > 3600
+    message: |
+      Таймаут сессии установлен более чем на 1 час (3600 секунд). Долгоживущие
+      сессии увеличивают риск захвата сессии. Установите таймаут 15-30 минут для
+      чувствительных приложений.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-613
+
+  - id: cookie-without-httponly
+    patterns:
+      - pattern: |
+          Cookie $COOKIE = new Cookie(...);
+          ...
+          $RESPONSE.addCookie($COOKIE);
+      - pattern-not-inside: |
+          $COOKIE.setHttpOnly(true);
+    message: |
+      Cookie создана без флага HttpOnly. JavaScript может получить доступ к cookie
+      через document.cookie, что ведёт к краже сессии через XSS. Установите:
+      cookie.setHttpOnly(true)
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-1004
+
+  - id: cookie-without-secure-flag
+    patterns:
+      - pattern: |
+          Cookie $COOKIE = new Cookie(...);
+          ...
+          $RESPONSE.addCookie($COOKIE);
+      - pattern-not-inside: |
+          $COOKIE.setSecure(true);
+    message: |
+      Cookie создана без флага Secure. Cookie может передаваться по HTTP, что
+      позволяет перехват. Установите: cookie.setSecure(true) для передачи только
+      через HTTPS.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-614
+
+  - id: cookie-samesite-not-set
+    patterns:
+      - pattern: |
+          Cookie $COOKIE = new Cookie(...);
+          ...
+          $RESPONSE.addCookie($COOKIE);
+      - pattern-not-inside: |
+          $COOKIE.setAttribute("SameSite", ...);
+    message: |
+      Cookie без атрибута SameSite. Уязвима к CSRF атакам. Установите SameSite=Strict
+      или SameSite=Lax для предотвращения межсайтовой подделки запросов.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-352
+
+  - id: session-id-in-url
+    pattern-either:
+      - pattern: |
+          response.encodeURL($URL)
+      - pattern: |
+          response.encodeRedirectURL($URL)
+      - pattern: |
+          ";jsessionid=" + $SESSIONID
+    message: |
+      Session ID встроен в URL. Session ID в URL логируются в истории браузера,
+      логах прокси, Referer заголовках. Используйте cookies для управления сессиями.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-598
+
+  # Подробные сообщения об ошибках
+
+  - id: exception-stack-trace-exposed
+    patterns:
+      - pattern-either:
+          - pattern: |
+              catch ($EX) {
+                ...
+                $EX.printStackTrace();
+                ...
+              }
+          - pattern: |
+              catch ($EX) {
+                ...
+                response.getWriter().println($EX);
+                ...
+              }
+          - pattern: |
+              catch ($EX) {
+                ...
+                return $EX.getMessage();
+              }
+    message: |
+      Стек-трейс или сообщение исключения раскрываются пользователю. Раскрывает
+      внутреннюю структуру приложения, пути к файлам, версии библиотек. Логируйте
+      ошибки внутренне, возвращайте пользователю общее сообщение об ошибке.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-209
+
+  - id: sql-exception-exposed
+    patterns:
+      - pattern: |
+          catch (SQLException $EX) {
+            ...
+            return ... + $EX.getMessage() + ...;
+          }
+    message: |
+      Детали SQLException раскрываются пользователю. Раскрывает схему базы данных,
+      имена таблиц, имена колонок. Возвращайте общее сообщение "Ошибка базы данных".
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-209
+
+  - id: file-not-found-path-disclosure
+    patterns:
+      - pattern: |
+          catch (FileNotFoundException $EX) {
+            ...
+            return ... + $EX.getMessage() + ...;
+          }
+    message: |
+      FileNotFoundException с полным путём раскрывается. Раскрывает структуру файловой
+      системы сервера. Возвращайте общее "Файл не найден" без деталей пути.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-209
+
+  - id: error-page-shows-server-info
+    pattern: |
+      <error-page>
+        ...
+        <error-code>500</error-code>
+        <location>/error.jsp</location>
+      </error-page>
+    message: |
+      Настроена кастомная страница ошибок, но может раскрывать информацию о сервере.
+      Убедитесь, что error.jsp не отображает стек-трейсы или внутренние детали.
+      Используйте общие сообщения об ошибках в production.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-209
+
+  - id: debug-logging-in-production
+    pattern-either:
+      - pattern: |
+          logger.debug("SQL: " + $QUERY);
+      - pattern: |
+          System.out.println($VAR);
+      - pattern: |
+          logger.trace(...);
+    message: |
+      Debug/trace логирование в коде. Если уровень логирования неправильно настроен
+      в production, конфиденциальные данные могут попасть в логи. Используйте
+      соответствующие уровни логирования (INFO, WARN, ERROR) для production кода.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-532
+
+  # Дефолтные учётные данные
+
+  - id: jdbc-default-credentials
+    patterns:
+      - pattern-either:
+          - pattern: |
+              DriverManager.getConnection($URL, "admin", $PASS)
+          - pattern: |
+              DriverManager.getConnection($URL, "root", $PASS)
+          - pattern: |
+              DriverManager.getConnection($URL, "sa", "")
+      - meta:variable-pattern:
+          meta:variable: $PASS
+          patterns:
+            - pattern-either:
+                - pattern: '""'
+                - pattern: '"admin"'
+                - pattern: '"password"'
+                - pattern: '"root"'
+    message: |
+      JDBC подключение с дефолтными/слабыми учётными данными. Используйте сильные
+      пароли из переменных окружения: System.getenv("DB_PASSWORD")
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-798
+
+  - id: embedded-database-default-password
+    pattern-either:
+      - pattern: |
+          spring.datasource.username=sa
+      - pattern: |
+          spring.datasource.password=
+      - pattern: |
+          jdbc:h2:mem:testdb
+    message: |
+      Встроенная база данных с дефолтными учётными данными. Подходит только для
+      разработки. Используйте внешнюю базу данных с сильной аутентификацией в
+      production.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-798
+
+  - id: default-jmx-credentials
+    pattern-either:
+      - pattern: |
+          com.sun.management.jmxremote.authenticate=false
+      - pattern: |
+          jmxremote.password.file=
+    message: |
+      JMX удалённый мониторинг без аутентификации. Позволяет выполнение удалённого
+      кода через манипуляцию MBean. Включите аутентификацию и используйте сильные
+      пароли.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-306
+
+  # Облачные конфигурации
+
+  - id: aws-credentials-hardcoded
+    pattern-either:
+      - pattern: |
+          BasicAWSCredentials($ACCESS_KEY, $SECRET_KEY)
+      - patterns:
+          - pattern: |
+              new BasicAWSCredentials($KEY, $SECRET)
+          - meta:variable-pattern:
+              meta:variable: $KEY
+              pattern: '"AKIA..."'
+    message: |
+      AWS учётные данные захардкожены в исходном коде. Учётные данные будут
+      раскрыты в системе контроля версий. Используйте AWS SDK default credential
+      provider chain или IAM роли.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-798
+
+  - id: s3-bucket-public-access
+    patterns:
+      - pattern: |
+          $BUCKET.setPublicAccessBlockConfiguration(...)
+      - pattern-inside: |
+          PublicAccessBlockConfiguration.builder()
+            .blockPublicAcls(false)
+            ...
+    message: |
+      S3 bucket настроен на разрешение публичных ACL. Это может раскрыть
+      конфиденциальные данные. Установите blockPublicAcls(true) и
+      blockPublicPolicy(true), если публичный доступ не является намеренным.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-668
+
+  - id: dynamodb-encryption-disabled
+    patterns:
+      - pattern: |
+          CreateTableRequest.builder()
+            ...
+      - pattern-not-inside: |
+          .sseSpecification(SSESpecification.builder().enabled(true)...)
+    message: |
+      Таблица DynamoDB создана без шифрования в состоянии покоя. Включите SSE для
+      шифрования конфиденциальных данных: sseSpecification(SSESpecification.builder().enabled(true))
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-311
+
+  - id: gcp-storage-public-access
+    patterns:
+      - pattern: |
+          $BLOB.createAcl(Acl.of(Acl.User.ofAllUsers(), Acl.Role.READER))
+    message: |
+      Объект GCP Storage сделан публично читаемым. Это раскрывает данные в
+      интернет. Используйте подписанные URL или IAM политики для контролируемого
+      доступа.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-668
+
+  - id: azure-storage-anonymous-access
+    patterns:
+      - pattern: |
+          $CONTAINER.setPublicAccess(PublicAccessType.BLOB)
+      - pattern: |
+          $CONTAINER.setPublicAccess(PublicAccessType.CONTAINER)
+    message: |
+      Azure Storage контейнер разрешает анонимный доступ. Данные могут быть
+      получены без аутентификации. Используйте PublicAccessType.OFF для
+      конфиденциальных данных.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-668
+
+  # Конфигурация баз данных
+
+  - id: hibernate-show-sql-enabled
+    pattern: |
+      hibernate.show_sql=true
+    message: |
+      Hibernate настроена на логирование SQL запросов. Раскрывает схему базы данных
+      и потенциально конфиденциальные данные в логах. Отключите в production.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-532
+
+  - id: jpa-ddl-auto-dangerous
+    pattern-either:
+      - pattern: |
+          spring.jpa.hibernate.ddl-auto=create
+      - pattern: |
+          spring.jpa.hibernate.ddl-auto=create-drop
+    message: |
+      JPA настроена на пересоздание схемы базы данных при запуске. Это УДАЛЯЕТ все
+      таблицы и данные. Используйте 'validate' или 'none' в production.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-1188
+
+  - id: database-connection-pool-no-validation
+    patterns:
+      - pattern: |
+          $DS.setTestOnBorrow(false);
+      - pattern: |
+          $DS.setValidationQuery(null);
+    message: |
+      Пул подключений к базе данных без валидации подключений. Устаревшие подключения
+      могут вызывать сбои. Включите: setTestOnBorrow(true) и установите validationQuery.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-404
+
+  - id: mongo-connection-without-auth
+    patterns:
+      - pattern: |
+          MongoClient.create("mongodb://localhost:27017")
+      - pattern-not: |
+          MongoClient.create("mongodb://$USER:$PASS@...")
+    message: |
+      MongoDB подключение без аутентификации. Используйте строку подключения с
+      учётными данными: mongodb://user:pass@host или используйте SSL/TLS с
+      клиентскими сертификатами.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-306
+
+  # Логирование конфиденциальных данных
+
+  - id: logging-password
+    pattern-either:
+      - pattern: |
+          logger.$METHOD("... password: " + $PASS + ...)
+      - pattern: |
+          logger.$METHOD("... password=" + $PASS + ...)
+      - pattern: |
+          System.out.println("password: " + $PASS)
+    message: |
+      Пароль логируется в открытом виде. Пароли в логах могут быть получены
+      неавторизованным персоналом. Никогда не логируйте пароли, токены или секреты.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-532
+
+  - id: logging-credit-card
+    patterns:
+      - pattern: |
+          logger.$METHOD(... + $CC + ...)
+      - meta:variable-regex:
+          meta:variable: $CC
+          regex: "(card|credit|cvv|ccv|pan)"
+    message: |
+      Потенциально данные кредитной карты логируются. Нарушение PCI-DSS. Маскируйте
+      или редактируйте конфиденциальную платёжную информацию перед логированием.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-532
+
+  - id: logging-jwt-token
+    pattern-either:
+      - pattern: |
+          logger.$METHOD("... token: " + $TOKEN + ...)
+      - pattern: |
+          logger.$METHOD("JWT: " + $JWT)
+    message: |
+      JWT токен логируется. Токены в логах могут быть извлечены и использованы для
+      неавторизованного доступа. Логируйте только метаданные токена (subject, expiry),
+      но не полный токен.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-532
+
+  # Дополнительные неправильные конфигурации
+
+  - id: directory-listing-enabled
+    pattern: |
+      <init-param>
+        <param-name>listings</param-name>
+        <param-value>true</param-value>
+      </init-param>
+    message: |
+      Листинг директорий включён в конфигурации сервлета. Атакующие могут просматривать
+      структуру файлов и скачивать скомпилированные классы. Установите listings в false.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-548
+
+  - id: jackson-default-typing-enabled
+    pattern-either:
+      - pattern: |
+          $MAPPER.enableDefaultTyping()
+      - pattern: |
+          $MAPPER.activateDefaultTyping(...)
+    message: |
+      Jackson default typing включён. Позволяет десериализацию произвольных классов,
+      ведущую к RCE. Используйте @JsonTypeInfo с whitelist вместо default typing.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-502
+
+  - id: servlet-error-page-missing
+    patterns:
+      - pattern-inside: |
+          <web-app>
+            ...
+          </web-app>
+      - pattern-not-inside: |
+          <error-page>
+            <error-code>500</error-code>
+            ...
+          </error-page>
+    message: |
+      Не настроена кастомная страница ошибок для 500 ошибок. Дефолтные страницы
+      ошибок могут раскрывать стек-трейсы. Настройте кастомные страницы ошибок
+      для 404, 500, 403.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-209
+
+  - id: insecure-random-for-security
+    pattern-either:
+      - pattern: |
+          Random $R = new Random();
+          ...
+          $R.nextInt()
+      - pattern: |
+          Math.random()
+    message: |
+      Использование некриптографического Random для целей безопасности. Используйте
+      SecureRandom для session ID, токенов, nonce, ключей или любой критичной для
+      безопасности случайности.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-338
+
+  - id: trustmanager-accepts-all-certificates
+    patterns:
+      - pattern-inside: |
+          class $CLASS implements X509TrustManager {
+            ...
+          }
+      - pattern: |
+          public void checkServerTrusted(...) { }
+    message: |
+      TrustManager принимает все SSL сертификаты. Отключает валидацию сертификатов,
+      позволяя MITM атаки. Используйте дефолтный TrustManager или корректно
+      валидируйте сертификаты против доверенного CA.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A02:2025 - Security Misconfiguration
+      cwe: CWE-295
