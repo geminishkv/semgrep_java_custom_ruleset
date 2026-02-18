@@ -1,1 +1,1082 @@
 # A06:2025 – Insecure Design
+
+rules:
+  # Отсутствие Rate Limiting
+  
+  - id: missing-rate-limiting-rest-endpoint
+    patterns:
+      - pattern-inside: |
+          @RestController
+          class $CLASS { ... }
+      - pattern: |
+          @PostMapping(...)
+          public $RET $METHOD(...) { ... }
+      - pattern-not-inside: |
+          @RateLimited
+          ...
+      - pattern-not-inside: |
+          if (rateLimiter.tryAcquire()) { ... }
+    message: |
+      REST endpoint без rate limiting. Позволяет brute-force атаки, credential stuffing,
+      DDoS, API abuse. Добавьте аннотацию @RateLimited или middleware для ограничения
+      частоты запросов (например, 100 req/min на IP).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-799
+      owasp: A06:2025 - Insecure Design
+      references:
+        - https://owasp.org/Top10/A06_2025-Insecure_Design/
+
+  - id: authentication-endpoint-without-rate-limit
+    patterns:
+      - pattern-inside: |
+          @RestController
+          class $CLASS { ... }
+      - pattern: |
+          @PostMapping(...)
+          public $RET $METHOD(@RequestBody $TYPE $CREDS) {
+            ...
+            authenticationManager.authenticate(...);
+            ...
+          }
+      - pattern-not-inside: |
+          if (rateLimiter.allowRequest(...)) { ... }
+    message: |
+      Endpoint аутентификации без rate limiting. Критично уязвимо к brute-force атакам
+      на пароли. Реализуйте прогрессивные задержки (exponential backoff) или CAPTCHA
+      после N неудачных попыток (рекомендуется 5).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-307
+
+  - id: password-reset-without-rate-limit
+    patterns:
+      - pattern-inside: |
+          @RestController
+          class $CLASS { ... }
+      - pattern-either:
+          - pattern: |
+              @PostMapping("/password-reset")
+              public $RET $METHOD(...) { ... }
+          - pattern: |
+              @PostMapping("/forgot-password")
+              public $RET $METHOD(...) { ... }
+      - pattern-not-inside: |
+          rateLimiter.checkLimit($EMAIL);
+    message: |
+      Endpoint сброса пароля без rate limiting. Позволяет enumeration email-адресов
+      и email bombing (массовая отправка писем). Ограничьте до 3-5 запросов на email
+      в час, добавьте CAPTCHA.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-770
+
+  - id: registration-endpoint-without-rate-limit
+    patterns:
+      - pattern-inside: |
+          @RestController
+          class $CLASS { ... }
+      - pattern: |
+          @PostMapping("/register")
+          public $RET $METHOD(@RequestBody $TYPE $USER) {
+            ...
+            userService.register($USER);
+            ...
+          }
+      - pattern-not-inside: |
+          rateLimiter.checkRegistration(...);
+    message: |
+      Endpoint регистрации без rate limiting. Позволяет массовое создание fake
+      аккаунтов (bot registration), exhaustion ресурсов. Ограничьте регистрации
+      по IP (например, 5/час) и добавьте CAPTCHA или email verification.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-770
+
+  - id: api-key-generation-without-limit
+    patterns:
+      - pattern: |
+          @PostMapping("/api/keys")
+          public $RET generateApiKey(...) {
+            ...
+            return apiKeyService.create(...);
+          }
+      - pattern-not-inside: |
+          if (userApiKeyCount < MAX_KEYS) { ... }
+    message: |
+      Генерация API ключей без лимитов. Пользователь может создать неограниченное
+      количество ключей, что затрудняет отзыв доступа и мониторинг. Ограничьте
+      количество активных ключей на пользователя (например, max 5).
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  - id: file-upload-without-rate-limit
+    patterns:
+      - pattern-inside: |
+          @RestController
+          class $CLASS { ... }
+      - pattern: |
+          @PostMapping(...)
+          public $RET upload(@RequestParam("file") MultipartFile $FILE) {
+            ...
+          }
+      - pattern-not-inside: |
+          rateLimiter.checkUpload($USER);
+    message: |
+      Загрузка файлов без rate limiting. Позволяет DoS через загрузку множества
+      больших файлов, exhaustion дискового пространства. Ограничьте количество
+      загрузок (например, 10/час) и общий размер (1GB/день на пользователя).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-770
+
+  - id: search-endpoint-without-pagination
+    patterns:
+      - pattern-inside: |
+          @GetMapping(...)
+          public $RET search(@RequestParam String $QUERY) {
+            ...
+          }
+      - pattern-not: |
+          @GetMapping(...)
+          public Page<$TYPE> search(..., Pageable $PAGE) { ... }
+    message: |
+      Endpoint поиска без пагинации. Может вернуть миллионы результатов, вызывая
+      OOM и DoS. Всегда используйте Pageable с максимальным размером страницы
+      (например, max 100 записей) для защиты от resource exhaustion.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-770
+
+  - id: export-endpoint-without-limit
+    patterns:
+      - pattern: |
+          @GetMapping("/export")
+          public $RET export(...) {
+            ...
+            return dataService.exportAll();
+          }
+      - pattern-not-inside: |
+          if (recordCount > MAX_EXPORT_SIZE) { ... }
+    message: |
+      Endpoint экспорта данных без лимитов. Экспорт всей базы данных может вызвать
+      OOM, длительную обработку, DoS. Ограничьте размер экспорта (например, max
+      10,000 записей) и сделайте асинхронным для больших датасетов.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-770
+
+  # Небезопасная бизнес-логика
+
+  - id: missing-business-validation-amount
+    patterns:
+      - pattern-inside: |
+          public $RET $METHOD($TYPE $AMOUNT, ...) { ... }
+      - pattern-either:
+          - pattern: |
+              wallet.deduct($AMOUNT);
+          - pattern: |
+              account.withdraw($AMOUNT);
+          - pattern: |
+              payment.process($AMOUNT);
+      - pattern-not-inside: |
+          if ($AMOUNT > 0 && $AMOUNT <= ...) { ... }
+      - pattern-not-inside: |
+          @Min(0)
+          ...
+    message: |
+      Операция с деньгами без валидации суммы. Отсутствие проверки позволяет
+      передать отрицательные значения (пополнение вместо списания), 0, огромные
+      числа. Добавьте @Min, @Max или if-проверки с бизнес-лимитами.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-840
+
+  - id: missing-idempotency-payment
+    patterns:
+      - pattern-inside: |
+          @PostMapping(...)
+          public $RET $METHOD(...) { ... }
+      - pattern-either:
+          - pattern: |
+              paymentService.processPayment(...)
+          - pattern: |
+              orderService.createOrder(...)
+          - pattern: |
+              transactionService.execute(...)
+      - pattern-not-inside: |
+          if (idempotencyKeyExists($KEY)) { return cached; }
+    message: |
+      Критичная финансовая операция без idempotency key. При повторной отправке
+      запроса (network retry, двойной клик, API replay) создаётся дубликат
+      транзакции. Реализуйте проверку уникального ключа идемпотентности.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-841
+
+  - id: price-from-client-without-verification
+    patterns:
+      - pattern: |
+          @PostMapping("/checkout")
+          public $RET checkout(@RequestBody $TYPE $ORDER) {
+            ...
+            payment.charge($ORDER.getPrice());
+            ...
+          }
+      - pattern-not-inside: |
+          BigDecimal $CALCULATED = cart.calculateTotal();
+          if (!$ORDER.getPrice().equals($CALCULATED)) { throw ...; }
+    message: |
+      Цена товара принимается от клиента без серверной проверки. Клиент может
+      модифицировать запрос (Burp Suite) и изменить цену на 0.01. Всегда
+      пересчитывайте цену на сервере по cart items, игнорируя клиентское значение.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-840
+
+  - id: quantity-overflow-not-checked
+    patterns:
+      - pattern: |
+          int $QUANTITY = $REQUEST.getQuantity();
+          ...
+          int $TOTAL = $PRICE * $QUANTITY;
+      - pattern-not-inside: |
+          if ($QUANTITY > 0 && $QUANTITY <= MAX_QUANTITY) { ... }
+    message: |
+      Количество товара без проверки на overflow. Клиент может отправить
+      Integer.MAX_VALUE, вызывая integer overflow: 100 * MAX_VALUE = отрицательное
+      число. Валидируйте диапазон (например, 1-999) и используйте BigDecimal для
+      расчётов.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-190
+
+  - id: discount-code-reuse-allowed
+    patterns:
+      - pattern: |
+          @PostMapping("/apply-discount")
+          public $RET applyDiscount(@RequestParam String $CODE) {
+            ...
+            Discount $D = discountService.getByCode($CODE);
+            return $D.getAmount();
+          }
+      - pattern-not-inside: |
+          if (discountService.isUsed($CODE, $USER)) { throw ...; }
+    message: |
+      Промокод может быть использован многократно. Отсутствие проверки на повторное
+      использование позволяет неограниченное применение скидки. Реализуйте
+      одноразовые коды или лимит использований (например, once per user).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-841
+
+  - id: workflow-step-skip-allowed
+    patterns:
+      - pattern: |
+          @PostMapping("/step3")
+          public $RET processStep3(...) {
+            ...
+          }
+      - pattern-not-inside: |
+          if (!workflowService.isStep2Completed($USER)) {
+            throw new WorkflowViolationException();
+          }
+    message: |
+      Шаг multi-step процесса без проверки завершения предыдущих шагов. Пользователь
+      может вызвать /step3 напрямую, пропустив step1 и step2. Всегда проверяйте
+      состояние workflow перед выполнением операции.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-841
+
+  - id: balance-check-race-condition
+    patterns:
+      - pattern: |
+          if (account.getBalance() >= $AMOUNT) {
+            account.deduct($AMOUNT);
+          }
+      - pattern-not-inside: |
+          synchronized ($LOCK) { ... }
+      - pattern-not-inside: |
+          @Transactional(isolation = Isolation.SERIALIZABLE)
+          ...
+    message: |
+      Race condition при проверке и списании баланса. Два параллельных запроса могут
+      пройти проверку баланса до списания, уводя счёт в минус. Используйте
+      optimistic/pessimistic locking или database constraints (CHECK balance >= 0).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-362
+
+  - id: user-role-from-jwt-without-verification
+    patterns:
+      - pattern: |
+          String $ROLE = jwt.getClaim("role");
+          ...
+          if ($ROLE.equals("admin")) { ... }
+      - pattern-not-inside: |
+          if (!userService.hasRole($USER_ID, $ROLE)) { throw ...; }
+    message: |
+      Роль пользователя берётся из JWT без серверной проверки. Если JWT не подписан
+      должным образом или есть уязвимость, атакующий может подделать роль. Всегда
+      проверяйте роли по базе данных для критичных операций.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-807
+
+  - id: referral-reward-without-fraud-check
+    patterns:
+      - pattern: |
+          @PostMapping("/referral")
+          public $RET claimReward(@RequestParam String $CODE) {
+            ...
+            wallet.credit($REWARD_AMOUNT);
+            ...
+          }
+      - pattern-not-inside: |
+          if (fraudDetection.isSuspicious($USER, $CODE)) { ... }
+    message: |
+      Реферальная награда без проверки на fraud. Пользователь может создать множество
+      fake аккаунтов для получения rewards (self-referral). Реализуйте проверку:
+      одинаковый IP, email pattern, device fingerprint, минимальная активность.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-840
+
+  - id: age-verification-client-side-only
+    patterns:
+      - pattern-inside: |
+          @PostMapping(...)
+          public $RET $METHOD(@RequestBody $TYPE $DATA) { ... }
+      - pattern: |
+          int $AGE = $DATA.getAge();
+      - pattern-not-inside: |
+          LocalDate $BIRTHDATE = $DATA.getBirthdate();
+          if (Period.between($BIRTHDATE, LocalDate.now()).getYears() < 18) { throw ...; }
+    message: |
+      Проверка возраста принимает значение от клиента без пересчёта. Клиент может
+      отправить age=25, будучи несовершеннолетним. Всегда запрашивайте дату рождения
+      и рассчитывайте возраст на сервере для compliance (COPPA, GDPR).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-840
+
+  - id: lottery-random-not-secure
+    patterns:
+      - pattern: |
+          Random $RAND = new Random();
+          ...
+          int $WINNER = $RAND.nextInt($PARTICIPANTS);
+      - pattern-inside: |
+          public $RET selectWinner(...) { ... }
+    message: |
+      Лотерея/розыгрыш использует небезопасный Random. java.util.Random предсказуем,
+      seed может быть вычислен, результат воспроизведён. Для fairness используйте
+      SecureRandom или провабельно честные алгоритмы (verifiable randomness).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-338
+
+  - id: subscription-tier-from-client
+    patterns:
+      - pattern: |
+          @PostMapping("/subscribe")
+          public $RET subscribe(@RequestBody $TYPE $SUB) {
+            ...
+            subscription.setTier($SUB.getTier());
+            ...
+          }
+      - pattern-not-inside: |
+          if (payment.verify($SUB.getTier().getPrice())) { ... }
+    message: |
+      Уровень подписки (tier) принимается от клиента без проверки оплаты. Пользователь
+      может отправить tier=PREMIUM без оплаты. Серверная логика должна назначать tier
+      на основе успешной payment verification.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-840
+
+  # Отсутствие CAPTCHA / Bot Protection
+
+  - id: public-form-without-captcha
+    patterns:
+      - pattern-inside: |
+          @PostMapping(...)
+          public $RET $METHOD(@RequestBody $TYPE $FORM) { ... }
+      - pattern-either:
+          - pattern-inside: |
+              @PostMapping("/contact")
+              ...
+          - pattern-inside: |
+              @PostMapping("/feedback")
+              ...
+          - pattern-inside: |
+              @PostMapping("/comment")
+              ...
+      - pattern-not-inside: |
+          if (captchaService.verify($CAPTCHA)) { ... }
+    message: |
+      Публичная форма без CAPTCHA. Уязвима к spam, bot submissions, resource exhaustion.
+      Добавьте reCAPTCHA v3 (невидимая) или hCaptcha для защиты от автоматизации.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-799
+
+  - id: voting-endpoint-without-bot-protection
+    patterns:
+      - pattern: |
+          @PostMapping("/vote")
+          public $RET vote(@RequestParam $TYPE $OPTION) {
+            ...
+            voteService.increment($OPTION);
+            ...
+          }
+      - pattern-not-inside: |
+          if (deviceFingerprint.isUnique($REQUEST)) { ... }
+    message: |
+      Endpoint голосования без защиты от ботов. Атакующий может автоматизировать
+      голосование через скрипты. Реализуйте: одно голосование на device fingerprint,
+      CAPTCHA, proof-of-work challenge.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-799
+
+  - id: like-button-without-throttling
+    patterns:
+      - pattern: |
+          @PostMapping("/like")
+          public $RET like(@RequestParam Long $POST_ID) {
+            ...
+            postService.incrementLikes($POST_ID);
+            ...
+          }
+      - pattern-not-inside: |
+          if (rateLimiter.allowLike($USER, $POST_ID)) { ... }
+    message: |
+      Кнопка "лайк" без throttling. Пользователь может отправить тысячи лайков в
+      секунду через скрипт, искажая метрики. Ограничьте лайки (например, max 10/минуту)
+      и добавьте проверку на повторные лайки.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-770
+
+  - id: sms-otp-without-device-limit
+    patterns:
+      - pattern: |
+          @PostMapping("/send-otp")
+          public $RET sendOtp(@RequestParam String $PHONE) {
+            ...
+            smsService.send($PHONE, $OTP);
+            ...
+          }
+      - pattern-not-inside: |
+          if (deviceCount($PHONE) > MAX_DEVICES) { throw ...; }
+    message: |
+      Отправка SMS OTP без лимита на количество устройств. Атакующий может зарегистрировать
+      один номер на сотнях устройствах для abuse. Ограничьте количество активных
+      устройств на номер (например, max 5).
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  - id: newsletter-subscription-without-confirmation
+    patterns:
+      - pattern: |
+          @PostMapping("/subscribe")
+          public $RET subscribe(@RequestParam String $EMAIL) {
+            ...
+            newsletter.add($EMAIL);
+            ...
+          }
+      - pattern-not-inside: |
+          emailService.sendConfirmation($EMAIL);
+    message: |
+      Подписка на newsletter без email confirmation (double opt-in). Позволяет
+      subscribe чужие email-адреса для spam/harassment. Всегда используйте double
+      opt-in: отправьте confirmation link перед активацией подписки.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  # Недостаточная изоляция
+
+  - id: shared-session-between-users
+    patterns:
+      - pattern: |
+          @SessionScope
+          @Component
+          class $CLASS {
+            private $TYPE $USER_DATA;
+            ...
+          }
+    message: |
+      Данные пользователя хранятся в @SessionScope bean. В multi-threaded окружении
+      это может привести к утечке данных между пользователями (session bleeding).
+      Используйте @RequestScope или ThreadLocal для изоляции пользовательских данных.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-488
+
+  - id: tenant-isolation-missing
+    patterns:
+      - pattern-inside: |
+          @Repository
+          interface $REPO extends JpaRepository<$ENTITY, $ID> { ... }
+      - pattern-not: |
+          @Query("... WHERE tenantId = :tenantId")
+          ...
+    message: |
+      JPA Repository без tenant isolation в multi-tenant системе. Отсутствие фильтрации
+      по tenantId позволяет пользователям одного tenant получать данные другого.
+      Добавьте @Where(clause="tenant_id = :currentTenant") или @FilterDef.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-668
+
+  - id: cache-shared-between-users
+    patterns:
+      - pattern: |
+          @Cacheable(...)
+          public $RET $METHOD(...) {
+            ...
+            return userService.getSensitiveData($USER_ID);
+          }
+      - pattern-not: |
+          @Cacheable(key = "#userId")
+          ...
+    message: |
+      Cache без user-specific key. Данные одного пользователя могут быть закешированы
+      и отданы другому (cache poisoning). Всегда включайте user ID в cache key:
+      @Cacheable(key = "#userId + ':' + #method")
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-524
+
+  - id: global-error-handler-leaks-data
+    patterns:
+      - pattern-inside: |
+          @ControllerAdvice
+          class $HANDLER { ... }
+      - pattern: |
+          @ExceptionHandler(Exception.class)
+          public $RET handleException(Exception $EX) {
+            ...
+            return ResponseEntity.status(500).body($EX);
+          }
+    message: |
+      Global exception handler возвращает полный exception объект. Это может раскрыть
+      конфиденциальные данные из exception message (SQL queries, file paths,
+      user data). Возвращайте generic error message, логируйте детали внутренне.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-209
+
+  - id: admin-panel-same-session
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @GetMapping("/admin/**")
+              ...
+          - pattern: |
+              @GetMapping("/user/**")
+              ...
+      - pattern-not-inside: |
+          if (session.getAttribute("context").equals("admin")) { ... }
+    message: |
+      Admin панель использует ту же сессию, что и user panel. Если admin открывает
+      user view, он может случайно выполнить admin операции в user контексте или
+      наоборот (privilege confusion). Используйте отдельные session contexts.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-668
+
+  - id: connection-pool-without-isolation
+    patterns:
+      - pattern: |
+          DataSource $DS = ...;
+          Connection $CONN = $DS.getConnection();
+          ...
+          $CONN.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+    message: |
+      Transaction isolation level установлен в READ_UNCOMMITTED. Позволяет dirty reads -
+      одна транзакция видит uncommitted изменения другой. Для финансовых операций
+      используйте минимум READ_COMMITTED или SERIALIZABLE.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-662
+
+  - id: user-files-stored-together
+    patterns:
+      - pattern: |
+          String $PATH = "/uploads/" + $FILENAME;
+          ...
+          fileService.save($PATH, $FILE);
+      - pattern-not: |
+          String $PATH = "/uploads/" + $USER_ID + "/" + $FILENAME;
+    message: |
+      Файлы всех пользователей хранятся в одной директории без user-specific folders.
+      Риск filename collision, unauthorized access если есть path traversal. Создавайте
+      поддиректории по user ID: /uploads/{userId}/{filename}
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-668
+
+  # Отсутствие Fail-Safe механизмов
+
+  - id: payment-without-rollback
+    patterns:
+      - pattern: |
+          paymentGateway.charge($AMOUNT);
+          ...
+          orderService.createOrder($ORDER);
+      - pattern-not-inside: |
+          try {
+            ...
+          } catch (Exception $EX) {
+            paymentGateway.refund(...);
+            throw $EX;
+          }
+    message: |
+      Payment и создание заказа без rollback механизма. Если createOrder() падает
+      после charge(), деньги списаны, но заказ не создан. Оберните в @Transactional
+      или реализуйте compensating transaction (refund при ошибке).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-754
+
+  - id: authentication-default-allow
+    patterns:
+      - pattern: |
+          if ($USER.isAuthenticated()) {
+            return true;
+          }
+          return true;
+      - pattern-not: |
+          if ($USER.isAuthenticated()) {
+            return true;
+          }
+          return false;
+    message: |
+      Authentication проверка с default allow (fail-open). Если проверка не срабатывает
+      или падает, доступ предоставляется. Fail-safe принцип: default должен быть DENY.
+      Всегда возвращайте false по умолчанию.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-636
+
+  - id: circuit-breaker-missing
+    patterns:
+      - pattern: |
+          public $RET $METHOD(...) {
+            ...
+            externalService.call(...);
+            ...
+          }
+      - pattern-not-inside: |
+          @CircuitBreaker(...)
+          ...
+      - pattern-not-inside: |
+          if (circuitBreaker.allowRequest()) { ... }
+    message: |
+      Вызов внешнего сервиса без circuit breaker. Если сервис падает или медленно
+      отвечает, все threads заблокируются в ожидании (cascading failure). Добавьте
+      @CircuitBreaker (Resilience4j) для fail-fast и graceful degradation.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-754
+
+  - id: timeout-not-configured
+    patterns:
+      - pattern: |
+          RestTemplate $RT = new RestTemplate();
+          ...
+          $RT.getForObject($URL, ...);
+      - pattern-not-inside: |
+          $RT.setRequestFactory(new SimpleClientHttpRequestFactory());
+          ...
+          factory.setConnectTimeout(...);
+    message: |
+      HTTP client без timeout. Если сервер не отвечает, request висит бесконечно,
+      блокируя thread (resource exhaustion). Установите connect timeout (5-10s) и
+      read timeout (30-60s) для всех HTTP clients.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-400
+
+  - id: database-query-without-timeout
+    patterns:
+      - pattern: |
+          @Query("SELECT ...")
+          List<$TYPE> $METHOD(...);
+      - pattern-not: |
+          @QueryHints(@QueryHint(name="javax.persistence.query.timeout", value="..."))
+          ...
+    message: |
+      JPA query без timeout. Сложный query или lock contention может выполняться
+      бесконечно, блокируя connection pool. Установите query timeout (например,
+      10 секунд) через @QueryHint.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-405
+
+  - id: exception-suppression-loses-context
+    patterns:
+      - pattern: |
+          try {
+            ...
+          } catch (Exception $EX) {
+            // ignore
+          }
+    message: |
+      Exception полностью подавлен без логирования. При ошибке fail-silent - пользователь
+      не получает уведомления, система продолжает работу в неконсистентном состоянии.
+      Всегда логируйте exceptions и решите: fail-fast (throw) или graceful degradation.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-391
+
+  # Хардкод бизнес-лимитов
+
+  - id: hardcoded-max-amount
+    patterns:
+      - pattern: |
+          if ($AMOUNT > 1000000) { throw ...; }
+      - pattern-not: |
+          if ($AMOUNT > config.getMaxTransactionAmount()) { throw ...; }
+    message: |
+      Максимальная сумма транзакции захардкожена в коде. Изменение лимита требует
+      релиза. Выносите бизнес-лимиты в конфигурацию (application.yml, database,
+      feature flags) для гибкости и A/B тестирования.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  - id: hardcoded-retry-count
+    patterns:
+      - pattern: |
+          for (int $I = 0; $I < 3; $I++) {
+            ...
+          }
+      - pattern-inside: |
+          public $RET $METHOD(...) {
+            ...
+            externalService.call(...);
+            ...
+          }
+    message: |
+      Количество retry попыток захардкожено (magic number 3). Для разных сервисов
+      может требоваться разное количество retry. Вынесите в конфигурацию и используйте
+      exponential backoff: @Retryable(maxAttempts = ${retry.max})
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  - id: hardcoded-token-expiry
+    patterns:
+      - pattern: |
+          long $EXPIRY = System.currentTimeMillis() + 3600000;
+      - pattern-not: |
+          long $EXPIRY = System.currentTimeMillis() + config.getTokenTTL();
+    message: |
+      Время жизни токена захардкожено (1 час). Для разных типов токенов (access,
+      refresh, API key) могут требоваться разные TTL. Вынесите в конфигурацию для
+      гибкого управления безопасностью.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  - id: hardcoded-page-size
+    patterns:
+      - pattern: |
+          Pageable $PAGE = PageRequest.of($PAGE_NUM, 100);
+    message: |
+      Размер страницы захардкожен (100 записей). Разные endpoints могут требовать
+      разные размеры страниц. Вынесите в конфигурацию и установите максимальный
+      лимит (например, max 1000) для защиты от resource exhaustion.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  - id: hardcoded-salt-rounds
+    patterns:
+      - pattern: |
+          BCrypt.hashpw($PASSWORD, BCrypt.gensalt(10))
+      - pattern-not: |
+          BCrypt.hashpw($PASSWORD, BCrypt.gensalt(config.getBcryptRounds()))
+    message: |
+      Количество BCrypt rounds захардкожено. С ростом вычислительных мощностей может
+      потребоваться увеличить rounds (рекомендуется 12-14). Вынесите в конфигурацию
+      для адаптации к изменению threat landscape.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  # Отсутствие Audit Trail
+
+  - id: critical-operation-without-audit
+    patterns:
+      - pattern-inside: |
+          @PostMapping(...)
+          public $RET $METHOD(...) { ... }
+      - pattern-either:
+          - pattern: |
+              userService.delete($USER_ID);
+          - pattern: |
+              roleService.assignAdmin($USER_ID);
+          - pattern: |
+              paymentService.refund($TRANSACTION_ID);
+      - pattern-not-inside: |
+          auditService.log(...);
+    message: |
+      Критичная операция (удаление пользователя, назначение admin, refund) без
+      audit logging. Невозможно отследить кто, когда и почему выполнил операцию
+      (forensics, compliance). Логируйте: who, what, when, why, old/new values.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-778
+
+  - id: financial-transaction-without-audit
+    patterns:
+      - pattern: |
+          wallet.deduct($AMOUNT);
+      - pattern-not-inside: |
+          transactionLog.record($USER, $AMOUNT, $REASON);
+    message: |
+      Финансовая транзакция без audit trail. При спорах, расследованиях fraud
+      необходима полная история транзакций. Записывайте: amount, timestamp,
+      user_id, IP, reason, balance_before, balance_after.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-778
+
+  - id: permission-change-without-audit
+    patterns:
+      - pattern: |
+          user.setPermissions($NEW_PERMISSIONS);
+      - pattern-not-inside: |
+          auditLog.logPermissionChange($USER, $OLD, $NEW, $ADMIN);
+    message: |
+      Изменение permissions без audit. Privilege escalation атаки невозможно
+      обнаружить post-factum. Логируйте изменения permissions: кто изменил, для
+      кого, старые/новые права, обоснование.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-778
+
+  - id: configuration-change-without-audit
+    patterns:
+      - pattern: |
+          configService.update($KEY, $VALUE);
+      - pattern-not-inside: |
+          auditService.logConfigChange($KEY, $OLD_VALUE, $VALUE, $ADMIN);
+    message: |
+      Изменение конфигурации системы без audit. Изменения критичных настроек
+      (security policies, feature flags) должны быть отслеживаемы для compliance.
+      Логируйте: что изменено, кем, старое/новое значение, когда.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-778
+
+  # Недостатки архитектурного дизайна
+
+  - id: synchronous-long-operation
+    patterns:
+      - pattern-inside: |
+          @PostMapping(...)
+          public $RET $METHOD(...) { ... }
+      - pattern-either:
+          - pattern: |
+              emailService.sendBulk(...);
+          - pattern: |
+              reportService.generate(...);
+          - pattern: |
+              exportService.exportAll(...);
+      - pattern-not-inside: |
+          @Async
+          ...
+      - pattern-not-inside: |
+          executor.submit(() -> ...);
+    message: |
+      Длительная операция (bulk email, report generation, export) выполняется
+      синхронно в HTTP request. Это блокирует thread, может вызвать timeout, DoS
+      при множественных запросах. Сделайте асинхронной (@Async) или через queue.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-400
+
+  - id: missing-request-correlation-id
+    patterns:
+      - pattern-inside: |
+          @RestController
+          class $CLASS { ... }
+      - pattern-not: |
+          @GetMapping(...)
+          public $RET $METHOD(@RequestHeader("X-Request-ID") String $ID, ...) { ... }
+    message: |
+      REST API без correlation ID для request tracing. При ошибках в distributed
+      системе невозможно связать логи разных сервисов. Добавьте X-Request-ID header,
+      передавайте через MDC для сквозного трейсинга.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+
+  - id: no-graceful-shutdown
+    patterns:
+      - pattern-inside: |
+          @SpringBootApplication
+          class $APP { ... }
+      - pattern-not: |
+          @Bean
+          public ServletWebServerFactory serverFactory() {
+            ...
+            factory.setShutdownGracePeriod(...);
+            ...
+          }
+    message: |
+      Приложение без graceful shutdown. При остановке in-flight requests прерываются,
+      транзакции не завершаются (data loss, inconsistency). Настройте grace period
+      (например, 30s) для завершения активных requests перед shutdown.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A06:2025 - Insecure Design
+      cwe: CWE-404
