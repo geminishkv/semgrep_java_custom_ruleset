@@ -1,1 +1,1144 @@
 # A07:2025 – Authentication Failures
+
+rules:
+  # Слабые пароли и учётные данные
+  
+  - id: weak-password-validation
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if ($PASSWORD.length() >= 6) { ... }
+          - pattern: |
+              @Size(min = 6)
+              String $PASSWORD;
+      - pattern-not: |
+          if ($PASSWORD.length() >= 12 && containsUppercase($PASSWORD) && ...) { ... }
+    message: |
+      Слабая валидация пароля - требуется только длина ≥6 символов. Современные
+      требования NIST/OWASP: минимум 12 символов (рекомендуется 15), без требований
+      к спецсимволам (они не повышают энтропию). Проверяйте пароль против списка
+      скомпрометированных паролей (HaveIBeenPwned API).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      cwe: CWE-521
+      owasp: A07:2025 - Authentication Failures
+      references:
+        - https://owasp.org/Top10/A07_2025-Authentication_Failures/
+
+  - id: password-complexity-regex-bypass
+    patterns:
+      - pattern: |
+          Pattern $PATTERN = Pattern.compile("^(?=.*[A-Z])(?=.*[0-9]).{8,}$");
+          ...
+          if ($PATTERN.matcher($PASSWORD).matches()) { ... }
+    message: |
+      Валидация пароля через regex без проверки на скомпрометированные пароли.
+      Regex типа "Password1!" проходит проверку, но легко подбирается. Используйте
+      библиотеку zxcvbn для оценки силы пароля и проверяйте против breach databases.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-521
+
+  - id: default-credentials-hardcoded
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if ($USERNAME.equals("admin") && $PASSWORD.equals("admin")) { ... }
+          - pattern: |
+              if ($USERNAME.equals("root") && $PASSWORD.equals("toor")) { ... }
+          - pattern: |
+              String $DEFAULT_PASS = "password123";
+    message: |
+      Дефолтные учётные данные захардкожены в коде (admin/admin, root/toor). Это
+      критическая уязвимость - атакующие знают эти пары. Требуйте изменение дефолтного
+      пароля при первом входе или генерируйте уникальные credentials для каждой установки.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-798
+
+  - id: username-case-sensitive-comparison
+    patterns:
+      - pattern: |
+          if ($INPUT_USERNAME.equals($STORED_USERNAME)) { ... }
+      - pattern-not: |
+          if ($INPUT_USERNAME.equalsIgnoreCase($STORED_USERNAME)) { ... }
+    message: |
+      Username сравнивается case-sensitive. Пользователь может создать "Admin" и
+      "admin" как разные аккаунты, что создаёт confusion и social engineering векторы.
+      Используйте .equalsIgnoreCase() или храните usernames в lowercase.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  - id: password-allows-username
+    patterns:
+      - pattern: |
+          public boolean validatePassword(String $USERNAME, String $PASSWORD) {
+            ...
+            return $PASSWORD.length() >= 8;
+          }
+      - pattern-not-inside: |
+          if ($PASSWORD.contains($USERNAME)) { return false; }
+    message: |
+      Валидация пароля не проверяет, что пароль не содержит username. Пользователи
+      часто используют "john123" для username "john" - легко подбирается. Запретите
+      использование username или его частей в пароле.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-521
+
+  - id: password-in-get-request
+    patterns:
+      - pattern: |
+          @GetMapping("/login")
+          public $RET login(@RequestParam String $PASSWORD, ...) { ... }
+    message: |
+      Пароль передаётся через GET параметр. Пароли попадают в URL, логируются в
+      access logs, browser history, proxy logs, Referer headers. Используйте только
+      POST с телом запроса для передачи credentials.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-598
+
+  - id: credentials-in-url
+    patterns:
+      - pattern: |
+          String $URL = "https://" + $USERNAME + ":" + $PASSWORD + "@" + $HOST;
+      - pattern: |
+          URL $URL = new URL("https://$USER:$PASS@...");
+    message: |
+      Учётные данные в URL (HTTP Basic Auth в URL). Credentials логируются везде,
+      где логируется URL. Используйте Authorization header или POST body для
+      передачи credentials.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-598
+
+  - id: api-key-in-query-parameter
+    patterns:
+      - pattern: |
+          @GetMapping(...)
+          public $RET $METHOD(@RequestParam("apiKey") String $KEY) { ... }
+      - pattern: |
+          String $URL = $BASE + "?apiKey=" + $KEY;
+    message: |
+      API ключ передаётся в query parameter. Ключи попадают в логи, могут быть
+      перехвачены через Referer. Используйте Authorization header (Bearer token)
+      или custom header (X-API-Key) для передачи API ключей.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-598
+
+  - id: password-expiry-not-enforced
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/login")
+          public $RET login(...) { ... }
+      - pattern-not-inside: |
+          if (user.getPasswordAge() > MAX_PASSWORD_AGE) {
+            throw new PasswordExpiredException();
+          }
+    message: |
+      УСТАРЕВШАЯ ПРАКТИКА: Принудительная ротация паролей каждые 90 дней больше НЕ
+      рекомендуется NIST/OWASP. Пользователи создают предсказуемые паттерны
+      (Password1 → Password2). Требуйте смену только при подозрении на компрометацию
+      или использовании скомпрометированного пароля.
+    severity: INFO
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      references:
+        - https://pages.nist.gov/800-63-3/sp800-63b.html
+
+  - id: sequential-passwords-allowed
+    patterns:
+      - pattern: |
+          public boolean changePassword($OLD, $NEW) {
+            ...
+            return true;
+          }
+      - pattern-not-inside: |
+          if (isSimilar($OLD, $NEW)) { throw ...; }
+    message: |
+      Смена пароля без проверки на схожесть с предыдущим. Пользователи меняют
+      Password1 → Password2 → Password3. Проверяйте Levenshtein distance между
+      старым и новым паролем (например, distance > 3).
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-521
+
+  # Отсутствие/ слабая MFA
+
+  - id: sensitive-operation-without-mfa
+    patterns:
+      - pattern-inside: |
+          @PostMapping(...)
+          public $RET $METHOD(...) { ... }
+      - pattern-either:
+          - pattern: |
+              userService.deleteAccount($USER_ID);
+          - pattern: |
+              paymentService.transferFunds(...);
+          - pattern: |
+              roleService.assignAdmin(...);
+      - pattern-not-inside: |
+          if (!mfaService.isVerified($USER, $TOKEN)) { throw ...; }
+    message: |
+      Критичная операция (удаление аккаунта, перевод средств, назначение admin) без
+      MFA verification. Если пароль скомпрометирован, атакующий получает полный доступ.
+      Требуйте step-up authentication (повторное подтверждение MFA) для чувствительных
+      операций.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-306
+
+  - id: mfa-backup-codes-unlimited
+    patterns:
+      - pattern: |
+          @PostMapping("/mfa/backup-codes")
+          public $RET generateBackupCodes() {
+            ...
+            return backupCodeService.generate();
+          }
+      - pattern-not-inside: |
+          if (user.getBackupCodesGeneratedCount() > MAX_GENERATIONS) { throw ...; }
+    message: |
+      Генерация MFA backup кодов без лимитов. Пользователь может генерировать
+      бесконечное количество backup кодов, обходя MFA. Ограничьте генерацию
+      (например, 1 раз в 24 часа) и логируйте для audit.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  - id: totp-without-rate-limiting
+    patterns:
+      - pattern: |
+          @PostMapping("/verify-totp")
+          public $RET verify(@RequestParam String $CODE) {
+            ...
+            return totpService.verify($USER, $CODE);
+          }
+      - pattern-not-inside: |
+          if (rateLimiter.isBlocked($USER)) { throw ...; }
+    message: |
+      TOTP verification без rate limiting. Атакующий может перебрать все 1,000,000
+      комбинаций 6-значного кода за ~3 минуты при отсутствии лимитов. Ограничьте
+      до 3-5 попыток в 30 секунд, затем exponential backoff или temporary lock.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-307
+
+  - id: sms-otp-sent-multiple-times
+    patterns:
+      - pattern: |
+          @PostMapping("/send-otp")
+          public $RET sendOtp(@RequestParam String $PHONE) {
+            ...
+            smsService.send($PHONE, $OTP);
+            ...
+          }
+      - pattern-not-inside: |
+          if (otpService.getRecentSendCount($PHONE) > MAX_SENDS) { throw ...; }
+    message: |
+      SMS OTP отправляется без ограничения количества. Атакующий может заспамить
+      пользователя SMS (SMS bombing) или истощить SMS кредиты. Ограничьте отправку
+      (например, max 3 OTP за 10 минут на номер).
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-770
+
+  - id: otp-valid-too-long
+    patterns:
+      - pattern: |
+          long $EXPIRY = System.currentTimeMillis() + 3600000;
+      - pattern-inside: |
+          public String generateOtp(...) { ... }
+    message: |
+      OTP валиден 1 час (3600000 ms). Рекомендуемое время жизни OTP: 30-90 секунд
+      для TOTP, 5-10 минут для SMS/Email OTP. Длительное время валидности увеличивает
+      окно для перехвата и использования OTP.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  - id: mfa-enrollment-not-required
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/register")
+          public $RET register(@RequestBody $TYPE $USER) { ... }
+      - pattern-not-inside: |
+          if (!$USER.hasMfaConfigured()) {
+            return "redirect:/setup-mfa";
+          }
+    message: |
+      Регистрация пользователя без обязательной настройки MFA. Для чувствительных
+      систем (финансы, healthcare) MFA должна быть обязательной при регистрации
+      или первом входе. Опциональная MFA = низкий adoption rate.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  - id: mfa-bypass-via-remember-device
+    patterns:
+      - pattern: |
+          if ($REMEMBER_DEVICE) {
+            session.setAttribute("mfa_verified", true);
+            return "success";
+          }
+      - pattern-not-inside: |
+          if (daysSince($LAST_MFA) > 30) {
+            requireMfa();
+          }
+    message: |
+      "Remember this device" для MFA без временного лимита. Если устройство украдено
+      или lost, MFA обходится навсегда. Устанавливайте expiry для remembered devices
+      (например, 30 дней) и требуйте повторную MFA для чувствительных операций.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  # Проблемы управления сессиями
+
+  - id: session-fixation-vulnerability
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/login")
+          public $RET login(...) { ... }
+      - pattern-not: |
+          session.invalidate();
+          session = request.getSession(true);
+    message: |
+      Session fixation уязвимость - session ID не меняется после успешной аутентификации.
+      Атакующий может зафиксировать session ID жертвы до входа, затем использовать его
+      после входа жертвы. Всегда создавайте новую сессию после логина: session.invalidate()
+      + getSession(true).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-384
+
+  - id: session-id-in-url
+    patterns:
+      - pattern: |
+          String $URL = ... + ";jsessionid=" + $SESSION_ID + ...;
+      - pattern: |
+          response.encodeURL($PATH);
+    message: |
+      Session ID в URL (URL rewriting). Session IDs попадают в browser history,
+      bookmarks, Referer headers, proxy logs. Отключите URL rewriting в web.xml:
+      <session-config><tracking-mode>COOKIE</tracking-mode></session-config>
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-598
+
+  - id: session-timeout-not-configured
+    patterns:
+      - pattern-not: |
+          <session-timeout>30</session-timeout>
+      - pattern-inside: |
+          <web-app>
+            ...
+          </web-app>
+    message: |
+      Session timeout не настроен или слишком длинный. Дефолтный timeout может быть
+      несколько часов. Для публичных компьютеров это risk - пользователь забывает
+      разлогиниться. Установите 15-30 минут для web приложений, 5-10 минут для
+      финансовых систем.
+    severity: WARNING
+    languages: [xml]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-613
+
+  - id: logout-does-not-invalidate-session
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/logout")
+          public $RET logout(...) { ... }
+      - pattern-not: |
+          session.invalidate();
+    message: |
+      Logout не инвалидирует сессию. Session ID остаётся валидным после logout, что
+      позволяет session replay атаки. Всегда вызывайте session.invalidate() при
+      logout и очищайте все authentication tokens (JWT, OAuth).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-613
+
+  - id: concurrent-sessions-unlimited
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/login")
+          public $RET login(...) { ... }
+      - pattern-not-inside: |
+          if (sessionService.getActiveSessionCount($USER) >= MAX_SESSIONS) {
+            throw new TooManySessionsException();
+          }
+    message: |
+      Неограниченное количество одновременных сессий для пользователя. Если учётные
+      данные скомпрометированы, атакующий может держать множество активных сессий.
+      Ограничьте concurrent sessions (например, max 3) и покажите список активных
+      устройств пользователю.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  - id: session-data-contains-sensitive-info
+    patterns:
+      - pattern-either:
+          - pattern: |
+              session.setAttribute("password", $PASS);
+          - pattern: |
+              session.setAttribute("creditCard", $CC);
+          - pattern: |
+              session.setAttribute("ssn", $SSN);
+    message: |
+      Конфиденциальные данные (пароли, номера карт, SSN) хранятся в session. Session
+      может быть serialized на диск, replicated между серверами, leaked через
+      debugging. Никогда не храните чувствительные данные в session, только user ID
+      и minimal meta:data.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-524
+
+  - id: jwt-token-without-expiry
+    patterns:
+      - pattern: |
+          JWT.create()
+            .withSubject($USER)
+            .sign($ALGORITHM);
+      - pattern-not: |
+          JWT.create()
+            ...
+            .withExpiresAt(...)
+            .sign($ALGORITHM);
+    message: |
+      JWT токен без expiry date (exp claim). Токен валиден вечно, если украден -
+      невозможно отозвать без blacklist. Всегда устанавливайте expiry: access token
+      15-60 минут, refresh token 7-30 дней.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-613
+
+  - id: jwt-algorithm-none-allowed
+    patterns:
+      - pattern: |
+          DecodedJWT $JWT = JWT.decode($TOKEN);
+          ...
+          if ($JWT.getAlgorithm().equals("none")) { ... }
+    message: |
+      JWT парсится с поддержкой algorithm="none". Это критическая уязвимость -
+      атакующий может создать unsigned JWT и приложение его примет. Явно укажите
+      разрешённые алгоритмы (HS256, RS256) и отклоняйте "none".
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-347
+
+  - id: refresh-token-rotation-missing
+    patterns:
+      - pattern: |
+          @PostMapping("/refresh")
+          public $RET refresh(@RequestParam String $REFRESH_TOKEN) {
+            ...
+            return tokenService.generateAccessToken($REFRESH_TOKEN);
+          }
+      - pattern-not: |
+          String $NEW_REFRESH = tokenService.rotateRefreshToken($REFRESH_TOKEN);
+    message: |
+      Refresh token используется многократно без rotation. Если refresh token украден,
+      атакующий может бесконечно получать access tokens. Реализуйте refresh token
+      rotation: при использовании refresh token выдавайте новый refresh + access token,
+      старый refresh инвалидируйте.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-613
+
+  - id: remember-me-token-predictable
+    patterns:
+      - pattern: |
+          String $REMEMBER_TOKEN = Base64.encode($USERNAME + ":" + $TIMESTAMP);
+      - pattern: |
+          String $TOKEN = MD5($USERNAME + $PASSWORD);
+    message: |
+      Remember-me token предсказуем (base64(username:timestamp) или MD5(user+pass)).
+      Атакующий может forge токены для других пользователей. Используйте
+      cryptographically secure random tokens (SecureRandom, UUID) и храните hash в БД.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-330
+
+  # Защита от brute force
+
+  - id: login-without-rate-limiting
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/login")
+          public $RET login(@RequestBody $TYPE $CREDS) { ... }
+      - pattern-not-inside: |
+          if (rateLimiter.isBlocked($USERNAME) || rateLimiter.isBlocked($IP)) {
+            throw new TooManyAttemptsException();
+          }
+    message: |
+      Login endpoint без rate limiting. Критически уязвим к credential stuffing и
+      brute force атакам. Реализуйте rate limiting по IP (например, 20 попыток/час)
+      И по username (5 попыток/15 минут), затем exponential backoff или CAPTCHA.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-307
+
+  - id: account-lockout-permanent
+    patterns:
+      - pattern: |
+          if ($FAILED_ATTEMPTS >= 5) {
+            user.setLocked(true);
+            userRepository.save($USER);
+          }
+      - pattern-not-inside: |
+          user.setLockoutExpiry(System.currentTimeMillis() + LOCKOUT_DURATION);
+    message: |
+      Account lockout перманентный (без auto-unlock). Атакующий может массово
+      заблокировать аккаунты пользователей (DoS). Используйте временную блокировку
+      (например, 30 минут) с progressive delays: 5 минут → 15 минут → 1 час.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-645
+
+  - id: no-delay-after-failed-login
+    patterns:
+      - pattern: |
+          if (!passwordEncoder.matches($INPUT_PASS, $STORED_PASS)) {
+            return ResponseEntity.status(401).body("Invalid credentials");
+          }
+      - pattern-not-inside: |
+          Thread.sleep($DELAY);
+    message: |
+      Немедленный ответ при неудачной попытке входа. Атакующий может перебирать
+      тысячи паролей в секунду. Добавьте progressive delay: 0.5s после 1-й попытки,
+      1s после 2-й, 2s после 3-й и т.д. (exponential backoff) для throttling brute force.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-307
+
+  - id: timing-attack-username-enumeration
+    patterns:
+      - pattern: |
+          User $USER = userRepository.findByUsername($USERNAME);
+          if ($USER == null) {
+            return "User not found";
+          }
+          if (!passwordEncoder.matches($PASSWORD, $USER.getPassword())) {
+            return "Invalid password";
+          }
+    message: |
+      Timing attack позволяет enumeration usernames. Запрос с несуществующим username
+      возвращается быстрее (без BCrypt), чем с существующим (BCrypt проверка). Всегда
+      выполняйте dummy BCrypt hash для несуществующих users: passwordEncoder.matches(password, dummyHash).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-208
+
+  - id: failed-login-no-logging
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/login")
+          public $RET login(...) { ... }
+      - pattern: |
+          if (!authenticate($USER, $PASS)) {
+            return ResponseEntity.status(401).build();
+          }
+      - pattern-not-inside: |
+          logger.warn("Failed login attempt for user: {} from IP: {}", $USER, $IP);
+    message: |
+      Неудачные попытки входа не логируются. Невозможно обнаружить brute force или
+      credential stuffing атаки. Логируйте все failed attempts: username, IP, timestamp,
+      user-agent для security monitoring и incident response.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-778
+
+  - id: captcha-not-required-after-failures
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/login")
+          public $RET login(...) { ... }
+      - pattern-not-inside: |
+          if ($FAILED_ATTEMPTS >= 3 && !captchaService.verify($CAPTCHA)) {
+            throw new CaptchaRequiredException();
+          }
+    message: |
+      CAPTCHA не требуется после нескольких неудачных попыток входа. Автоматизированные
+      атаки (bots) продолжают brute force. Добавьте CAPTCHA после 3-5 неудачных
+      попыток для защиты от automated attacks.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-307
+
+  - id: distributed-brute-force-not-detected
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/login")
+          public $RET login(...) { ... }
+      - pattern-not-inside: |
+          if (distributedAttackDetector.isUnderAttack($USERNAME)) {
+            requireAdditionalVerification();
+          }
+    message: |
+      Защита только от single-source brute force (по IP). Distributed brute force
+      (атака с множества IP) не детектируется. Мониторьте failed attempts на username
+      level независимо от IP и детектируйте аномалии (например, 100 failed attempts
+      за час на один username с разных IP).
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  # Небезопасное восстановление пароля
+
+  - id: password-reset-token-predictable
+    patterns:
+      - pattern: |
+          String $TOKEN = UUID.randomUUID().toString();
+      - pattern-inside: |
+          public String generatePasswordResetToken($USER) { ... }
+      - pattern-not: |
+          String $TOKEN = SecureRandom.getInstanceStrong()...;
+    message: |
+      ВНИМАНИЕ: UUID.randomUUID() использует java.util.Random (не криптостойкий)
+      в некоторых реализациях JVM. Для password reset tokens используйте
+      SecureRandom с достаточной энтропией (минимум 128 бит, рекомендуется 256 бит).
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-330
+
+  - id: password-reset-token-long-expiry
+    patterns:
+      - pattern: |
+          long $EXPIRY = System.currentTimeMillis() + 86400000;
+      - pattern-inside: |
+          public $TYPE createResetToken(...) { ... }
+    message: |
+      Password reset token валиден 24 часа (86400000 ms). Рекомендуемый срок: 15-60
+      минут. Длительный срок увеличивает окно для перехвата email (compromised mailbox,
+      email forwarding rules). Для чувствительных систем - 15 минут maximum.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  - id: password-reset-without-current-password
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/change-password")
+          public $RET changePassword(@RequestParam String $NEW_PASSWORD) { ... }
+      - pattern-not: |
+          if (!passwordEncoder.matches($CURRENT_PASSWORD, $USER.getPassword())) {
+            throw new InvalidPasswordException();
+          }
+    message: |
+      Смена пароля без проверки текущего пароля. Если пользователь оставил
+      компьютер разблокированным, атакующий может сменить пароль без знания текущего.
+      Всегда требуйте текущий пароль или step-up authentication (MFA) для смены пароля.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-620
+
+  - id: security-questions-used
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if ($ANSWER.equals($USER.getSecurityAnswer())) { ... }
+          - pattern: |
+              @Column(name = "security_question")
+              String securityQuestion;
+    message: |
+      Security questions (mother's maiden name, pet name) используются для восстановления
+      пароля. OWASP и NIST не рекомендуют security questions - ответы легко найти в
+      соцсетях или угадать. Используйте email/SMS verification или MFA для password reset.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-640
+
+  - id: password-reset-link-reusable
+    patterns:
+      - pattern: |
+          @GetMapping("/reset-password")
+          public $RET resetPassword(@RequestParam String $TOKEN) {
+            ...
+            return "reset-form";
+          }
+      - pattern-not-inside: |
+          if (tokenService.isUsed($TOKEN)) {
+            throw new TokenAlreadyUsedException();
+          }
+    message: |
+      Password reset token может быть использован многократно. После сброса пароля
+      токен остаётся валидным до expiry. Если email скомпрометирован, атакующий может
+      повторно использовать ссылку. Инвалидируйте токен после первого использования.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+
+  - id: password-reset-no-notification
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/reset-password")
+          public $RET reset(@RequestBody $TYPE $DATA) { ... }
+      - pattern: |
+          user.setPassword($NEW_PASSWORD);
+          userRepository.save($USER);
+      - pattern-not-inside: |
+          emailService.sendPasswordChangedNotification($USER.getEmail());
+    message: |
+      Пароль изменён без уведомления пользователя. Если атакующий сбросил пароль,
+      владелец аккаунта не узнает об этом. Всегда отправляйте email уведомление при
+      смене пароля с информацией: когда, откуда (IP), устройство, и ссылкой
+      "Это были не вы? Восстановить аккаунт".
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-778
+
+  # Хранение учётных данных
+
+  - id: password-stored-plaintext
+    patterns:
+      - pattern: |
+          user.setPassword($PASSWORD);
+      - pattern-not: |
+          user.setPassword(passwordEncoder.encode($PASSWORD));
+    message: |
+      Пароль сохраняется в plaintext без хеширования. При утечке БД все пароли
+      раскрыты. Всегда хешируйте пароли с помощью BCrypt (cost factor 12-14),
+      Argon2id (рекомендуется OWASP) или scrypt перед сохранением.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-256
+
+  - id: weak-password-hashing-md5
+    patterns:
+      - pattern-either:
+          - pattern: |
+              MessageDigest.getInstance("MD5").digest($PASSWORD.getBytes());
+          - pattern: |
+              DigestUtils.md5Hex($PASSWORD);
+    message: |
+      Пароли хешируются через MD5. MD5 НЕ предназначен для паролей: слишком быстрый
+      (billions hashes/second на GPU), нет salt, уязвим к rainbow tables. Используйте
+      BCrypt, Argon2id или scrypt - медленные алгоритмы с встроенным salt.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-327
+
+  - id: weak-password-hashing-sha1
+    patterns:
+      - pattern-either:
+          - pattern: |
+              MessageDigest.getInstance("SHA-1").digest($PASSWORD.getBytes());
+          - pattern: |
+              DigestUtils.sha1Hex($PASSWORD);
+    message: |
+      Пароли хешируются через SHA-1. SHA-1, как и MD5, слишком быстрый для паролей
+      и не имеет встроенного salt. Даже SHA-256 не подходит - нужны специализированные
+      password hashing алгоритмы: BCrypt, Argon2id, scrypt.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-327
+
+  - id: bcrypt-insufficient-rounds
+    patterns:
+      - pattern: |
+          BCrypt.hashpw($PASSWORD, BCrypt.gensalt($ROUNDS))
+      - meta:variable-comparison:
+          meta:variable: $ROUNDS
+          comparison: $ROUNDS < 10
+    message: |
+      BCrypt rounds < 10 (cost factor слишком низкий). Современные рекомендации:
+      минимум 12, оптимально 13-14 (зависит от производительности сервера). Каждый
+      +1 к rounds удваивает время хеширования, защищая от brute force.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-916
+
+  - id: password-hash-without-salt
+    patterns:
+      - pattern: |
+          String $HASH = MessageDigest.getInstance($ALG).digest($PASSWORD.getBytes());
+      - pattern-not-inside: |
+          String $SALTED = $PASSWORD + $SALT;
+    message: |
+      Пароль хешируется без salt. Одинаковые пароли дают одинаковые хеши, что
+      позволяет rainbow table атаки и обнаружение популярных паролей. Всегда
+      используйте unique random salt на каждый пароль (BCrypt/Argon2 делают это
+      автоматически).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-759
+
+  - id: credentials-logged
+    patterns:
+      - pattern-either:
+          - pattern: |
+              logger.$METHOD("User login: " + $USERNAME + " password: " + $PASSWORD);
+          - pattern: |
+              logger.$METHOD("Credentials: {}", $CREDENTIALS);
+          - pattern: |
+              System.out.println("Password: " + $PASSWORD);
+    message: |
+      Учётные данные (пароли, токены) логируются. Логи доступны множеству людей
+      (devs, ops, support) и часто хранятся долго. Никогда не логируйте credentials -
+      это нарушение безопасности и compliance (GDPR, PCI DSS).
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-532
+
+  - id: api-key-stored-plaintext-database
+    patterns:
+      - pattern: |
+          @Column(name = "api_key")
+          String apiKey;
+      - pattern-not: |
+          @Column(name = "api_key_hash")
+          String apiKeyHash;
+    message: |
+      API ключи хранятся в БД в plaintext. При утечке БД все API ключи раскрыты.
+      Храните hash API ключей (SHA-256 с salt), показывайте plaintext ключ пользователю
+      только один раз при генерации (как GitHub personal access tokens).
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-256
+
+  # Authentication Bypass
+
+  - id: authentication-check-can-be-bypassed
+    patterns:
+      - pattern: |
+          if ($USER != null && $USER.isAuthenticated()) {
+            $AUTHORIZED_ACTION;
+          }
+          $UNAUTHORIZED_ACTION;
+      - pattern-not: |
+          if ($USER != null && $USER.isAuthenticated()) {
+            $AUTHORIZED_ACTION;
+          } else {
+            throw new UnauthorizedException();
+          }
+    message: |
+      Authentication проверка может быть обойдена - код после if выполняется независимо
+      от результата проверки. Это bypass authentication. Всегда используйте else branch
+      с exception или return для случая неавторизованного доступа.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-287
+
+  - id: sql-injection-in-authentication
+    patterns:
+      - pattern: |
+          String $QUERY = "SELECT * FROM users WHERE username = '" + $USERNAME + 
+                          "' AND password = '" + $PASSWORD + "'";
+          ...
+          Statement $STMT = $CONN.createStatement();
+          $STMT.executeQuery($QUERY);
+    message: |
+      SQL injection в authentication query. Атакующий может обойти аутентификацию с
+      помощью username: admin' OR '1'='1. Используйте PreparedStatement с параметрами
+      или ORM (JPA) для безопасных запросов.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-89
+
+  - id: ldap-injection-in-authentication
+    patterns:
+      - pattern: |
+          String $FILTER = "(uid=" + $USERNAME + ")";
+          ...
+          dirContext.search($BASE, $FILTER, ...);
+    message: |
+      LDAP injection в authentication. Атакующий может обойти аутентификацию с помощью
+      username: *)(uid=*))(|(uid=*. Используйте parameterized LDAP queries или
+      escapeLdapSearchFilter() для экранирования спецсимволов.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-90
+
+  - id: authentication-logic-flaw-null-check
+    patterns:
+      - pattern: |
+          if ($USER.getPassword() == null || $USER.getPassword().equals($INPUT)) {
+            return true;
+          }
+    message: |
+      Логическая ошибка в authentication - если пароль в БД null, аутентификация
+      проходит. Это bypass authentication для аккаунтов без пароля. Проверяйте
+      ($USER.getPassword() != null && passwordEncoder.matches(...)) - оба условия
+      должны быть true.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-287
+
+  - id: authentication-with-boolean-parameter
+    patterns:
+      - pattern: |
+          @PostMapping("/login")
+          public $RET login(@RequestParam boolean $IS_ADMIN, ...) { ... }
+      - pattern: |
+          if ($IS_ADMIN) {
+            grantAdminAccess();
+          }
+    message: |
+      Privileged access контролируется boolean параметром от клиента. Атакующий
+      может отправить isAdmin=true в запросе и получить admin права. Никогда не
+      доверяйте client-side данным для авторизации - проверяйте роли на сервере
+      по user ID из authenticated session.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-807
+
+  # Account Enumeration
+
+  - id: different-error-messages-login
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if ($USER == null) {
+                return "User not found";
+              }
+              if (!passwordMatches) {
+                return "Invalid password";
+              }
+          - pattern: |
+              throw new UserNotFoundException();
+          - pattern: |
+              throw new InvalidPasswordException();
+    message: |
+      Разные сообщения об ошибках при входе ("User not found" vs "Invalid password")
+      позволяют enumeration существующих usernames. Всегда возвращайте одинаковое
+      generic сообщение: "Invalid username or password" для любой ошибки аутентификации.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-209
+
+  - id: registration-reveals-existing-users
+    patterns:
+      - pattern: |
+          if (userRepository.existsByEmail($EMAIL)) {
+            return "Email already registered";
+          }
+      - pattern: |
+          if (userRepository.existsByUsername($USERNAME)) {
+            throw new UsernameAlreadyExistsException();
+          }
+    message: |
+      Registration endpoint раскрывает существующие emails/usernames. Атакующий может
+      проверить базу emails для targeted phishing. Показывайте generic сообщение
+      "Registration successful, check email" даже если email уже существует, и отправьте
+      email "Someone tried to register with your email".
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-203
+
+  - id: password-reset-reveals-user-existence
+    patterns:
+      - pattern: |
+          if (!userRepository.existsByEmail($EMAIL)) {
+            return "Email not found";
+          }
+          sendPasswordResetEmail($EMAIL);
+          return "Reset link sent";
+    message: |
+      Password reset раскрывает существующие emails. Всегда возвращайте "If email
+      exists, reset link was sent" независимо от того, существует email или нет.
+      Предотвращает enumeration emails для спама/phishing.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-203
+
+  # Дополнительные проблемы
+
+  - id: oauth-state-parameter-missing
+    patterns:
+      - pattern: |
+          @GetMapping("/oauth/callback")
+          public $RET callback(@RequestParam String $CODE) {
+            ...
+            return oauth2Client.exchangeCodeForToken($CODE);
+          }
+      - pattern-not: |
+          if (!$STATE.equals(session.getAttribute("oauth_state"))) {
+            throw new InvalidStateException();
+          }
+    message: |
+      OAuth callback без проверки state parameter. Уязвимо к CSRF - атакующий может
+      связать свой аккаунт OAuth provider с аккаунтом жертвы. Всегда генерируйте
+      random state, сохраняйте в session перед redirect, проверяйте в callback.
+    severity: ERROR
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
+      cwe: CWE-352
+
+  - id: auto-login-after-registration
+    patterns:
+      - pattern-inside: |
+          @PostMapping("/register")
+          public $RET register(@RequestBody $TYPE $USER) { ... }
+      - pattern: |
+          userService.register($USER);
+          ...
+          SecurityContextHolder.getContext().setAuthentication($AUTH);
+    message: |
+      Автоматический вход после регистрации без email verification. Позволяет
+      массовую регистрацию bot аккаунтов и access к системе до подтверждения email.
+      Требуйте email verification перед первым входом или используйте MFA enrollment.
+    severity: WARNING
+    languages: [java]
+    meta:
+      category: security
+      owasp: A07:2025 - Authentication Failures
