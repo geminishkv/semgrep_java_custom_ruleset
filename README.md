@@ -151,20 +151,31 @@ $ git reset --hard HEAD
 ```bash
 .
 ├── assets
+│   ├── docs
+│   │   ├── integrations.md
+│   │   ├── manual.md
+│   │   ├── metrics.md
+│   │   ├── patterns.md
+│   │   └── ruleset.md
 │   └── logotypemd.jpg
-├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md
 ├── image.png
 ├── LICENSE.md
 ├── Makefile
-├── NOTICE.md
 ├── README.md
 ├── rules
 │   └── custom
-│       ├── A01:2024.yml
-│       ├── A02:2024.yml
-│       └── A03:2024.yml
-└──  SECURITY.md
+│       ├── A01:2025.yml
+│       ├── A02:2025.yml
+│       ├── A03:2025.yml
+│       ├── A04:2025.yml
+│       ├── A05:2025.yml
+│       ├── A06:2025.yml
+│       ├── A07:2025.yml
+│       ├── A08:2025.yml # заглушка
+│       ├── A09:2025.yml # заглушка
+│       └── A10:2025.yml # заглушка
+└── SECURITY.md
 ```
 
 ***
