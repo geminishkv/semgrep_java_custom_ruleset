@@ -71,6 +71,27 @@ $ git log --oneline -10 -- java/
 
 ```
 
+### Ruleset cheatsheet
+
+```yaml
+pattern: $X.execute($QUERY) # Простое совпадение
+pattern-either: [...] # Логическое ИЛИ
+pattern-not: ... # Исключение
+patterns: [...] # Логическое И
+pattern-inside: ... # Внутри контекста
+metavariable-pattern: ... # Фильтр по метапеременной
+metavariable-comparison: ... # Сравнение значений
+
+# Метапеременные
+$X, $Y, $Z # Одиночное выражение
+$...ARGS # Список аргументов
+$... # Любой код
+
+# Тип сопоставления
+mode: taint # Taint-анализ
+```
+
+
 ### Manual workflow
 
 ```bash
@@ -129,10 +150,13 @@ $ git reset --hard HEAD
 
 ## **Refs**
 
-* Semgrep Documentation
-* Official Semgrep Rules
-* OWASP Top 10 2024
-* CWE Database
+* [Semgrep Documentation](https://semgrep.dev/docs/)
+* [Semgrep Rules Registry](https://github.com/semgrep/semgrep-rules)
+* [Semgrep Playground](https://semgrep.dev/playground)
+* [OWASP Top 10:2021](https://owasp.org/Top10/2021/)
+* [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
+* [CWE Database (MITRE)](https://cwe.mitre.org/)
+
 
 ***
 

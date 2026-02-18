@@ -22,4 +22,24 @@ rules:
       cwe: ["CWE-89"]
 ```
 
+### Cheatsheet
+
+```yaml
+pattern: $X.execute($QUERY) # Простое совпадение
+pattern-either: [...] # Логическое ИЛИ
+pattern-not: ... # Исключение
+patterns: [...] # Логическое И
+pattern-inside: ... # Внутри контекста
+metavariable-pattern: ... # Фильтр по метапеременной
+metavariable-comparison: ... # Сравнение значений
+
+# Метапеременные
+$X, $Y, $Z # Одиночное выражение
+$...ARGS # Список аргументов
+$... # Любой код
+
+# Тип сопоставления
+mode: taint # Taint-анализ
+```
+
 ***
