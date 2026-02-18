@@ -31,6 +31,8 @@
 - **Отчёты** — JSON и SARIF форматы для интеграции с CI/CD
 - **Быстрый старт** — всё настроено через Makefile, готово к использованию из коробки
 
+***
+
 ## **Категории:**
 
 - A01:2025 – Broken Access Control (Нарушение контроля доступа)
@@ -43,6 +45,46 @@
 - A08:2025 – Software or Data Integrity Failures (Сбои целостности)
 - A09:2025 – Security Logging & Alerting Failures (Сбои логирования)
 - A10:2025 – Mishandling of Exceptional Conditions (Неправильная обработка исключений)
+
+***
+
+## **Покрытие правил**
+
+- Всего правил: 363
+- Категорий OWASP: 7
+- Покрытие CWE: 97 уникальных категорий
+- Языки: Java (357), Dockerfile (2), YAML (1), XML (2), Properties (1)
+
+### Покрытие по категориям OWASP Top 10 2025
+
+<div align="center">
+
+| OWASP Категория | Файл | Правил | CRITICAL | ERROR | HIGH | WARNING | MEDIUM | INFO | CWE |
+|-----------------|------|--------|----------|-------|------|---------|--------|------|-----|
+| **A01:2025** - Broken Access Control | A01-2025.yml | 46 | 16 | 0 | 19 | 0 | 10 | 0 | 28 |
+| **A02:2025** - Security Misconfiguration | A02-2025.yml | 55 | 0 | 37 | 0 | 18 | 0 | 0 | 28 |
+| **A03:2025** - Software Supply Chain | A03-2025.yml | 50 | 0 | 25 | 0 | 18 | 0 | 7 | 11 |
+| **A04:2025** - Cryptographic Failures | A04-2025.yml | 52 | 16 | 0 | 20 | 0 | 16 | 0 | 23 |
+| **A05:2025** - Injection | A05-2025.yml | 53 | 19 | 0 | 23 | 0 | 11 | 0 | 18 |
+| **A06:2025** - Insecure Design | A06-2025.yml | 50 | 0 | 27 | 0 | 20 | 0 | 3 | 21 |
+| **A07:2025** - Authentication Failures | A07-2025.yml | 57 | 0 | 31 | 0 | 25 | 0 | 1 | 28 |
+| **ИТОГО** | **7 файлов** | **363** | **51** | **120** | **62** | **81** | **37** | **11** | **97** |
+
+</div>
+
+### Распределение по уровням серьезности
+
+| Severity | Количество | Процент |
+|----------|------------|---------|
+| CRITICAL | 51 | 14.0% |
+| ERROR | 120 | 33.1% |
+| HIGH | 62 | 17.1% |
+| WARNING | 81 | 22.3% |
+| MEDIUM | 37 | 10.2% |
+| INFO | 11 | 3.0% |
+| **ИТОГО** | **363** | **100.0%** |
+
+***
 
 ## **Сопроводительная информация**
 
@@ -70,27 +112,6 @@ $ cd rules/official-java-semgrep
 $ git log --oneline -10 -- java/
 
 ```
-
-### Ruleset cheatsheet
-
-```yaml
-pattern: $X.execute($QUERY) # Простое совпадение
-pattern-either: [...] # Логическое ИЛИ
-pattern-not: ... # Исключение
-patterns: [...] # Логическое И
-pattern-inside: ... # Внутри контекста
-metavariable-pattern: ... # Фильтр по метапеременной
-metavariable-comparison: ... # Сравнение значений
-
-# Метапеременные
-$X, $Y, $Z # Одиночное выражение
-$...ARGS # Список аргументов
-$... # Любой код
-
-# Тип сопоставления
-mode: taint # Taint-анализ
-```
-
 
 ### Manual workflow
 
@@ -156,7 +177,6 @@ $ git reset --hard HEAD
 * [OWASP Top 10:2021](https://owasp.org/Top10/2021/)
 * [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
 * [CWE Database (MITRE)](https://cwe.mitre.org/)
-
 
 ***
 

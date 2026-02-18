@@ -613,7 +613,7 @@
       owasp: A02:2025 - Security Misconfiguration
       cwe: CWE-352
 
-  - id: session-id-in-url
+  - id: config-session-id-in-url
     pattern-either:
       - pattern: |
           response.encodeURL($URL)
