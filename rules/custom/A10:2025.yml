@@ -1,1 +1,1123 @@
 # A10:2025 – Mishandling of Exceptional Conditions
+
+rules:
+
+# Раскрытие информации через ответы об ошибках
+
+- id: java-stacktrace-in-http-response
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch ($EX $E) {
+            $RESP.getWriter().println($E.getMessage());
+          }
+      - pattern: |
+          } catch (Exception $E) {
+            return ResponseEntity.status(500).body($E.getMessage());
+          }
+      - pattern: |
+          } catch ($EX $E) {
+            response.getWriter().write($E.toString());
+          }
+  message: |
+    Текст исключения возвращается напрямую в HTTP-ответ. Сообщения исключений
+    раскрывают внутреннюю структуру: пути к файлам, имена классов, версии
+    библиотек, SQL-запросы, имена колонок БД. Возвращайте generic-сообщение
+    ("Internal server error") клиенту, логируйте детали на сервере.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+    references:
+      - https://owasp.org/Top10/A10_2025-Mishandling_of_Exceptional_Conditions/
+
+- id: java-stacktrace-in-response-body
+  patterns:
+    - pattern-either:
+      - pattern: |
+          @ExceptionHandler(Exception.class)
+          public ResponseEntity<?> handleException(Exception $E) {
+            return ResponseEntity.status(500).body($E.getStackTrace());
+          }
+      - pattern: |
+          @ExceptionHandler
+          public $RET handle($EX $E, HttpServletResponse $RESP) {
+            $RESP.getWriter().write(Arrays.toString($E.getStackTrace()));
+          }
+  message: |
+    Stack trace возвращается в теле HTTP-ответа. Полный stacktrace раскрывает:
+    все классы и пакеты приложения, версии зависимостей, архитектуру, точные
+    строки кода. Атакующий использует эту информацию для таргетированных атак.
+    Возвращайте только error_id для корреляции, детали — только в логах.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-spring-error-attributes-full-stacktrace
+  patterns:
+    - pattern-either:
+      - pattern: |
+          server.error.include-stacktrace=always
+      - pattern: |
+          server.error.include-exception=true
+      - pattern: |
+          server.error.include-message=always
+      - pattern: |
+          server.error.include-binding-errors=always
+  message: |
+    Spring Boot настроен на включение полного stacktrace/exception/message
+    в стандартные error-ответы (/error endpoint). В production клиент
+    получает полную техническую информацию об ошибке. Установите все
+    значения в 'never' и обрабатывайте ошибки через @ControllerAdvice.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-sql-exception-message-exposed
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (SQLException $E) {
+            return ResponseEntity.badRequest().body($E.getMessage());
+          }
+      - pattern: |
+          } catch (DataAccessException $E) {
+            throw new RuntimeException($E.getMessage());
+          }
+      - pattern: |
+          } catch (JpaSystemException $E) {
+            model.addAttribute("error", $E.getMessage());
+          }
+  message: |
+    Сообщение SQL-исключения раскрывается клиенту. SQLException.getMessage()
+    обычно содержит SQL-запрос с параметрами, имена таблиц и колонок.
+    Это прямая помощь атакующему для SQL Injection. Логируйте SQLException
+    полностью, клиенту возвращайте только "Database error occurred".
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-file-not-found-path-disclosed
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (FileNotFoundException $E) {
+            return ResponseEntity.notFound().headers(
+              h -> h.set("X-Error", $E.getMessage())).build();
+          }
+      - pattern: |
+          } catch (IOException $E) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, $E.getMessage());
+          }
+  message: |
+    FileNotFoundException.getMessage() раскрывает полный путь к файлу в ответе
+    клиенту. Пути к файлам раскрывают структуру ОС, имена пользователей,
+    расположение приложения. Клиенту возвращайте только "Resource not found",
+    детали логируйте на сервере.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-classnotfound-exception-exposed
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (ClassNotFoundException $E) {
+            $RESP.getWriter().write("Class not found: " + $E.getMessage());
+          }
+      - pattern: |
+          } catch (NoClassDefFoundError $E) {
+            return "error: " + $E.getMessage();
+          }
+  message: |
+    ClassNotFoundException/NoClassDefFoundError раскрывает имена классов
+    и структуру classpath приложения. Атакующий может узнать наличие/отсутствие
+    конкретных библиотек для выбора эксплойта. Никогда не возвращайте
+    имена классов из исключений в клиентский ответ.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-npe-message-in-response
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (NullPointerException $E) {
+            return ResponseEntity.status(500).body("NPE: " + $E.getMessage());
+          }
+      - pattern: |
+          } catch (NullPointerException $E) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Null pointer: " + $E.getMessage());
+          }
+  message: |
+    NullPointerException с сообщением возвращается клиенту. В Java 14+ NPE
+    содержит детали о полях и переменных ("Cannot invoke String.length()
+    because str is null") — это раскрывает имена полей и структуру объектов.
+    Перехватывайте NPE как 500 Internal Server Error без деталей.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-validation-error-full-path-exposed
+  patterns:
+    - pattern-either:
+      - pattern: |
+          return ResponseEntity.badRequest().body($BINDING_RESULT.getAllErrors());
+      - pattern: |
+          return ResponseEntity.badRequest().body($BINDING_RESULT.getFieldErrors());
+  message: |
+    Полные объекты BindingResult/FieldError возвращаются клиенту. Они содержат
+    имена полей, типы данных, классы объектов — раскрывают внутреннюю модель данных.
+    Маппируйте ошибки в безопасный DTO с только field + message, исключая
+    objectName, codes, rejectedValue (может содержать данные пользователя).
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-exception-cause-chain-exposed
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch ($EX $E) {
+            return new ErrorResponse($E.getCause().getMessage());
+          }
+      - pattern: |
+          return ResponseEntity.status(500)
+              .body(ExceptionUtils.getStackTrace($E));
+      - pattern: |
+          return ResponseEntity.status(500)
+              .body(ExceptionUtils.getMessage($E));
+  message: |
+    Цепочка причин исключения (getCause chain) или полный stacktrace через
+    Apache ExceptionUtils возвращается клиенту. Цепочка причин раскрывает
+    все уровни стека, включая драйверы БД, сетевые библиотеки, внутреннюю
+    архитектуру. Обрезайте информацию на уровне сервиса.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-generic-exception-no-specific-handling
+  patterns:
+    - pattern: |
+        @ExceptionHandler(Exception.class)
+        public ResponseEntity<?> handleAllExceptions(Exception $E) {
+          return ResponseEntity.status(500).body($E.getMessage());
+        }
+  message: |
+    Generic @ExceptionHandler(Exception.class) возвращает getMessage() клиенту.
+    Этот catch-all перехватывает все исключения включая NPE, SQL, AuthException —
+    каждое со своими чувствительными деталями. Создайте отдельные обработчики
+    для специфических типов, generic handler возвращает только correlation ID.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+# Игнорирование исключений
+
+- id: java-empty-catch-block
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch ($EX $E) {
+          }
+      - pattern: |
+          } catch (Exception $E) {
+            // ignored
+          }
+      - pattern: |
+          } catch ($EX $E) {
+            /* suppress */
+          }
+  message: |
+    Пустой catch-блок поглощает исключение без каких-либо действий. Если
+    это security-исключение (AuthException, CryptoException, AccessDeniedException)
+    — атака пройдёт незамеченной. Как минимум логируйте все пойманные
+    исключения. Если подавление намеренно — добавьте комментарий с обоснованием
+    и log.trace для отладки.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-security-exception-caught-silently
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (SecurityException $E) {
+            return false;
+          }
+      - pattern: |
+          } catch (AccessDeniedException $E) {
+            return null;
+          }
+      - pattern: |
+          } catch (AuthenticationException $E) {
+            return Optional.empty();
+          }
+    - pattern-not-inside: |
+        log.$LEVEL(...);
+  message: |
+    SecurityException/AccessDeniedException поглощается без логирования.
+    Возврат false/null без фиксации факта отказа делает security-решение
+    невидимым. Логируйте все отказы безопасности на уровне WARN с контекстом
+    перед возвратом безопасного значения.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-crypto-exception-silently-ignored
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (NoSuchAlgorithmException $E) {
+            return null;
+          }
+      - pattern: |
+          } catch (InvalidKeyException $E) {
+            return $INPUT;
+          }
+      - pattern: |
+          } catch (BadPaddingException $E) {
+            return new byte[0];
+          }
+      - pattern: |
+          } catch (SignatureException $E) {
+            return false;
+          }
+  message: |
+    Криптографическое исключение поглощается и возвращается небезопасное
+    значение (null, исходный input, false, пустой массив). Это означает:
+    шифрование не выполнено, подпись не проверена, ключ невалиден — но
+    код продолжает работу как будто всё ок. Перебрасывайте как checked exception.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-io-exception-swallowed-in-security-context
+  patterns:
+    - pattern-inside: |
+        @PostMapping("/login")
+        public $RET login(...) { ... }
+    - pattern: |
+        } catch (IOException $E) {
+          return ResponseEntity.ok($DEFAULT_RESPONSE);
+        }
+  message: |
+    IOException при обработке login-запроса поглощается и возвращается
+    success-ответ. Если ошибка ввода/вывода произошла при чтении credentials
+    или записи session — поведение неопределено. Возвращайте ошибку клиенту,
+    не продолжайте flow с потенциально некорректными данными.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-interrupted-exception-without-restore
+  patterns:
+    - pattern: |
+        } catch (InterruptedException $E) {
+          $LOG.warn("Interrupted", $E);
+        }
+    - pattern-not-inside: |
+        Thread.currentThread().interrupt();
+  message: |
+    InterruptedException поймано, но Thread.currentThread().interrupt() не вызван.
+    Это сбрасывает флаг прерывания потока. В security-контексте (rate limiter,
+    delay после failed login, timeout) это может обойти защитные паузы, если
+    поток прерван атакующим. Всегда восстанавливайте interrupted status.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-multiple-exceptions-one-catch-unsafe
+  patterns:
+    - pattern: |
+        } catch (AuthenticationException | NullPointerException $E) {
+          return ResponseEntity.status(401).build();
+        }
+  message: |
+    AuthenticationException и NullPointerException объединены в один catch.
+    NullPointerException — программная ошибка, AuthenticationException — ожидаемый
+    security-сценарий. Их объединение маскирует NPE как ошибку аутентификации.
+    Разделите обработчики: NPE должен быть 500, AuthException — 401.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+# Небезопасное состояние после исключения
+
+- id: java-transaction-committed-after-exception
+  patterns:
+    - pattern: |
+        try {
+          ...
+          $REPO.save($ENTITY);
+          ...
+        } catch ($EX $E) {
+          log.error("Error", $E);
+        }
+    - pattern-not-inside: |
+        @Transactional(rollbackFor = Exception.class)
+  message: |
+    Исключение перехватывается внутри транзакции без аннотации rollbackFor.
+    По умолчанию Spring откатывает транзакцию только для RuntimeException.
+    Если выброшено checked exception, транзакция может быть закоммичена
+    в частично изменённом состоянии. Используйте @Transactional(rollbackFor=Exception.class).
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-resource-not-closed-on-exception
+  patterns:
+    - pattern: |
+        Connection $CONN = dataSource.getConnection();
+        ...
+        Statement $STMT = $CONN.createStatement();
+        $STMT.execute($QUERY);
+        $CONN.close();
+    - pattern-not-inside: |
+        try ($TYPE $RES = ...) { ... }
+    - pattern-not-inside: |
+        } finally {
+          $CONN.close();
+        }
+  message: |
+    Connection/Statement закрывается только в happy path. При исключении
+    ресурс остаётся открытым — утечка соединений приводит к DoS (connection
+    pool exhaustion). В security-контексте незакрытые соединения могут быть
+    использованы другими потоками. Используйте try-with-resources.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-authentication-state-inconsistent-on-exception
+  patterns:
+    - pattern: |
+        SecurityContextHolder.getContext().setAuthentication($AUTH);
+        ...
+        userService.updateLastLogin($USER_ID);
+    - pattern-not-inside: |
+        } catch ($EX $E) {
+          SecurityContextHolder.clearContext();
+        }
+  message: |
+    Authentication устанавливается в SecurityContext, но при последующем
+    исключении (например, updateLastLogin) контекст не очищается. Пользователь
+    оказывается аутентифицирован при ошибке в post-auth логике. Всегда очищайте
+    SecurityContext в catch-блоке при ошибке после setAuthentication().
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-lock-not-released-on-exception
+  patterns:
+    - pattern: |
+        $LOCK.lock();
+        ...
+        $LOCK.unlock();
+    - pattern-not-inside: |
+        } finally {
+          $LOCK.unlock();
+        }
+  message: |
+    ReentrantLock.unlock() не вызывается в finally-блоке. При исключении
+    лок остаётся захваченным — deadlock и DoS. В security-контексте rate
+    limiter или access control на основе локов перестанут работать.
+    Всегда освобождайте лок в finally: lock.lock(); try {...} finally { lock.unlock(); }
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-session-not-invalidated-on-auth-exception
+  patterns:
+    - pattern-inside: |
+        @PostMapping("/login")
+        public $RET login(HttpSession $SESSION, ...) { ... }
+    - pattern: |
+        } catch (AuthenticationException $E) {
+          return ResponseEntity.status(401).body($MSG);
+        }
+    - pattern-not-inside: |
+        $SESSION.invalidate();
+  message: |
+    При ошибке аутентификации сессия не инвалидируется. Частично
+    инициализированная сессия может содержать временные данные. Для
+    защиты от Session Fixation вызывайте session.invalidate() при
+    любой ошибке аутентификации.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-file-write-partial-on-exception
+  patterns:
+    - pattern: |
+        FileOutputStream $FOS = new FileOutputStream($FILE);
+        ...
+        $FOS.write($DATA);
+        $FOS.close();
+    - pattern-not-inside: |
+        } catch ($EX $E) {
+          $FILE.delete();
+        }
+    - pattern-not-inside: |
+        try ($TYPE $FOS = ...) { ... }
+  message: |
+    При исключении во время записи файла частично записанный файл остаётся
+    на диске. Если это security-критичный файл (конфиг, ключи, сертификат),
+    частичная запись создаёт невалидный файл, который может обойти проверки.
+    Используйте атомарную запись: write to temp, then rename.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-concurrent-state-corrupted-on-exception
+  patterns:
+    - pattern: |
+        synchronized ($LOCK) {
+          $COLLECTION.add($ITEM);
+          $COUNTER++;
+        }
+    - pattern-not-inside: |
+        try { ... } catch ($EX $E) {
+          $COLLECTION.remove($ITEM);
+          $COUNTER--;
+        }
+  message: |
+    Synchronized блок модифицирует несколько структур данных без компенсирующей
+    логики при исключении. Если add() упадёт — counter уже не совпадает с
+    реальным размером коллекции. Используйте rollback-паттерн или
+    транзакционные структуры данных.
+  severity: MEDIUM
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+# Повторный выброс и оборачивание исключений
+
+- id: java-exception-wrapping-loses-security-context
+  patterns:
+    - pattern: |
+        } catch (AccessDeniedException $E) {
+          throw new RuntimeException("Error processing request");
+        }
+  message: |
+    AccessDeniedException оборачивается в generic RuntimeException. Spring
+    Security не перехватит RuntimeException как access denied — запрос
+    завершится как 500 Internal Server Error вместо 403 Forbidden. Это
+    маскирует security-решение. Перебрасывайте AccessDeniedException напрямую
+    или используйте @ResponseStatus(FORBIDDEN).
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-authentication-exception-wrapped-as-500
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (AuthenticationException $E) {
+            throw new InternalServerErrorException($MSG);
+          }
+      - pattern: |
+          } catch (AuthenticationException $E) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR);
+          }
+  message: |
+    AuthenticationException (401) оборачивается в 500 Internal Server Error.
+    Клиент не получает корректный HTTP-статус — может повторять запрос
+    вместо перенаправления на логин. Также 500 часто возвращает больше
+    деталей, чем 401. Сохраняйте семантику HTTP кодов при обработке исключений.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-rethrow-exception-with-sensitive-data
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (SQLException $E) {
+            throw new BusinessException("DB error for user " + $USER + ": " + $E.getMessage());
+          }
+      - pattern: |
+          } catch ($EX $E) {
+            throw new AppException("Error processing " + $SENSITIVE_DATA + ": " + $E);
+          }
+  message: |
+    Исключение перебрасывается с добавлением чувствительных данных (пользователь,
+    запрос) и сообщения оригинального исключения. Новое исключение потенциально
+    будет поймано где-то выше и возвращено клиенту с полными деталями.
+    Перебрасывайте только с безопасными параметрами (error_id), без PII и
+    деталей исключения.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-finally-block-overrides-exception
+  patterns:
+    - pattern: |
+        try {
+          ...
+          throw $EXCEPTION;
+        } finally {
+          return $VALUE;
+        }
+  message: |
+    return в finally-блоке подавляет исключение из try-блока. Если в try
+    выброшено SecurityException или AuthenticationException — оно будет
+    молча поглощено return. Это особенно опасно в security-методах: отказ
+    в доступе превращается в успешный возврат. Никогда не используйте
+    return в finally.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-584
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-exception-in-finally-masks-original
+  patterns:
+    - pattern: |
+        } finally {
+          ...
+          throw new $EX_TYPE($MSG);
+        }
+  message: |
+    Исключение выбрасывается в finally-блоке, что подавляет оригинальное
+    исключение из try-блока. Если оригинальным было security-исключение
+    (SignatureException, AccessDeniedException), оно будет потеряно и заменено
+    менее информативным. Обрабатывайте ресурсы в finally без выброса исключений.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-584
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+# Неверные HTTP статус-коды при ошибках
+
+- id: java-auth-failure-returns-200
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (AuthenticationException $E) {
+            return ResponseEntity.ok().body("Invalid credentials");
+          }
+      - pattern: |
+          if (!authenticated) {
+            return ResponseEntity.ok(new ErrorResponse("auth failed"));
+          }
+  message: |
+    Ошибка аутентификации возвращает HTTP 200 OK с error в теле ответа.
+    Это нарушает HTTP семантику, ломает клиентскую обработку ошибок,
+    может скрывать ошибки от security middleware. Возвращайте 401 Unauthorized
+    с WWW-Authenticate header при ошибке аутентификации.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-394
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-authorization-failure-returns-404
+  patterns:
+    - pattern: |
+        } catch (AccessDeniedException $E) {
+          return ResponseEntity.notFound().build();
+        }
+  message: |
+    AccessDeniedException возвращает 404 Not Found вместо 403 Forbidden.
+    Хотя это иногда используется намеренно для скрытия существования ресурсов,
+    это нарушает стандарты HTTP и усложняет отладку. Используйте 403 для
+    авторизованных запросов без прав, 404 только для реально несуществующих ресурсов.
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-394
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-validation-error-returns-500
+  patterns:
+    - pattern: |
+        } catch (ConstraintViolationException $E) {
+          return ResponseEntity.status(500).body("Validation error");
+        }
+  message: |
+    ConstraintViolationException (ошибка валидации) возвращает 500 Internal
+    Server Error. Это некорректно — ошибка валидации на стороне клиента
+    должна быть 400 Bad Request. 500 провоцирует retry-логику клиента,
+    создаёт лишнюю нагрузку и маскирует реальную проблему.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-394
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-rate-limit-exception-returns-500
+  patterns:
+    - pattern: |
+        } catch (RateLimitException $E) {
+          return ResponseEntity.status(500).build();
+        }
+    - pattern-not: |
+        return ResponseEntity.status(429).build();
+  message: |
+    RateLimitException возвращает 500 вместо 429 Too Many Requests.
+    429 — стандартный HTTP-код для rate limiting. Клиенты и load balancers
+    понимают 429 и применяют backoff. 500 же вызывает немедленный retry,
+    усугубляя нагрузку. Также 500 может раскрывать больше деталей.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-394
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+# Обработка ошибок в асинхронном контексте
+
+- id: java-async-exception-silently-lost
+  patterns:
+    - pattern: |
+        CompletableFuture.runAsync(() -> {
+          ...
+          $SECURITY_CHECK.verify($TOKEN);
+          ...
+        });
+    - pattern-not-inside: |
+        .exceptionally($E -> { ... })
+    - pattern-not-inside: |
+        .handle(($RES, $E) -> { ... })
+  message: |
+    CompletableFuture без .exceptionally()/.handle() теряет исключения из
+    async-задачи. Если security-проверка (verify, validate, authenticate)
+    упадёт — исключение будет потеряно, future завершится исключением, но
+    никто не узнает. Всегда добавляйте .exceptionally() для обработки ошибок.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-thread-uncaught-exception-no-handler
+  patterns:
+    - pattern: |
+        Thread $T = new Thread($RUNNABLE);
+        $T.start();
+    - pattern-not-inside: |
+        $T.setUncaughtExceptionHandler(...);
+  message: |
+    Thread запускается без UncaughtExceptionHandler. Исключения из потока
+    выводятся в stderr или теряются (при Thread.setDaemon(true)). Security-
+    исключения из фонового потока (проверка сертификата, обновление CRL,
+    session cleanup) будут потеряны. Устанавливайте UncaughtExceptionHandler
+    с логированием для всех потоков.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-executor-submit-exception-hidden
+  patterns:
+    - pattern: |
+        $EXECUTOR.submit(() -> {
+          ...
+        });
+    - pattern-not-inside: |
+        Future<?> $FUTURE = $EXECUTOR.submit(...);
+        $FUTURE.get();
+    - pattern-not-inside: |
+        .exceptionally(
+  message: |
+    Executor.submit() задача не отслеживается через Future.get() или
+    callback. Исключения из задачи скрыты внутри Future до вызова get().
+    Если get() никогда не вызывается — исключения теряются. Для security-
+    задач всегда обрабатывайте результат Future или используйте
+    ExecutorService с custom ThreadFactory и UncaughtExceptionHandler.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-scheduled-task-exception-swallowed
+  patterns:
+    - pattern: |
+        @Scheduled(fixedRate = $RATE)
+        public void $METHOD() {
+          try {
+            ...
+          } catch (Exception $E) {
+            log.error("Error in scheduled task", $E);
+          }
+        }
+    - pattern-not-inside: |
+        alertService.sendAlert(...);
+    - pattern-not-inside: |
+        metricsService.recordFailure(...);
+  message: |
+    Scheduled task перехватывает все исключения и только логирует их.
+    Если задача занимается security-функцией (ротация ключей, проверка
+    сертификатов, cleanup сессий), её систематический сбой не вызовет алерт.
+    Добавьте метрику failed executions и настройте алерт при превышении порога.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+# Небезопасные паттерны обработки ошибок
+
+- id: java-return-default-on-security-check-exception
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (Exception $E) {
+            return true;
+          }
+      - pattern: |
+          } catch ($EX $E) {
+            return Boolean.TRUE;
+          }
+    - pattern-inside: |
+        public boolean $METHOD_NAME(...) { ... }
+  message: |
+    Boolean-метод возвращает true при исключении. Если метод используется
+    для security-проверки (isAuthorized, isValid, hasPermission), исключение
+    может привести к предоставлению доступа вместо отказа. Fail-secure принцип:
+    при ошибке в security-проверке всегда возвращайте false/deny, не true/allow.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-null-return-on-auth-exception
+  patterns:
+    - pattern: |
+        public UserDetails loadUserByUsername(String $USERNAME) {
+          try {
+            ...
+          } catch (Exception $E) {
+            return null;
+          }
+        }
+  message: |
+    loadUserByUsername() возвращает null при исключении вместо выброса
+    UsernameNotFoundException. Spring Security не ожидает null из UserDetailsService
+    — это может вызвать NullPointerException выше по стеку и непредсказуемое
+    поведение аутентификации. Всегда выбрасывайте UsernameNotFoundException.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-catch-error-unexpected
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (Error $E) {
+            log.error("Error", $E);
+          }
+      - pattern: |
+          } catch (OutOfMemoryError $E) {
+            return ResponseEntity.status(500).body("OOM");
+          }
+      - pattern: |
+          } catch (StackOverflowError $E) {
+            return $DEFAULT;
+          }
+  message: |
+    Перехват java.lang.Error (OOM, StackOverflow). JVM Error означает
+    критическое состояние — JVM нестабильна. Продолжение работы после OOM
+    может привести к повреждению данных, некорректным security-решениям,
+    утечкам. При OOM/StackOverflow лучший ответ — graceful shutdown.
+    Не перехватывайте Error в бизнес-логике.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-double-catch-obscures-real-error
+  patterns:
+    - pattern: |
+        try {
+          try {
+            $SECURITY_OPERATION;
+          } catch ($INNER_EX $E) {
+            throw new RuntimeException("wrapped");
+          }
+        } catch (RuntimeException $E) {
+          return $DEFAULT_VALUE;
+        }
+  message: |
+    Вложенные try-catch полностью поглощают security-исключение: внутренний
+    catch оборачивает в RuntimeException, внешний catch поглощает RuntimeException
+    и возвращает дефолтное значение. Это паттерн, где исключение из security-
+    операции никогда не достигает обработчика. Упростите обработку и не теряйте
+    контекст исключения.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-390
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-try-catch-in-loop-break-on-exception
+  patterns:
+    - pattern: |
+        for ($INIT; $COND; $UPDATE) {
+          try {
+            ...
+            $SECURITY_CHECK($ITEM);
+          } catch ($EX $E) {
+            break;
+          }
+        }
+  message: |
+    Break из цикла при исключении в security-проверке. Если проверяются
+    несколько элементов (permissions, signatures, tokens), исключение при
+    проверке одного прерывает проверку остальных. Остальные элементы будут
+    считаться валидными без проверки. Обрабатывайте каждое исключение явно,
+    не прерывайте цикл проверок преждевременно.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-exception-timing-oracle
+  patterns:
+    - pattern: |
+        try {
+          $CRYPTO_OPERATION($INPUT_A);
+        } catch ($EX $E) {
+          return "invalid";
+        }
+        try {
+          $CRYPTO_OPERATION($INPUT_B);
+        } catch ($EX $E) {
+          return "invalid";
+        }
+        return "valid";
+  message: |
+    Последовательные криптографические операции с разными входными данными
+    возвращают разные ответы на основе типа исключения или его отсутствия.
+    Это может создать timing oracle или error oracle для атак типа padding oracle.
+    Используйте константное по времени сравнение и единый обработчик ошибок.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-755
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+# Конфигурация и глобальная обработка ошибок
+
+- id: java-no-global-exception-handler
+  patterns:
+    - pattern-inside: |
+        @RestController
+        class $CONTROLLER { ... }
+    - pattern-not-inside: |
+        @ControllerAdvice
+        class $ADVICE { ... }
+  message: |
+    RestController без глобального @ControllerAdvice обработчика исключений.
+    Без глобального обработчика Spring Boot вернёт дефолтный /error response
+    с потенциально чувствительной информацией (path, exception class, message).
+    Создайте @ControllerAdvice с явной обработкой всех типов исключений.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-whitelabel-error-page-not-disabled
+  patterns:
+    - pattern: |
+        server.error.whitelabel.enabled=true
+  message: |
+    Spring Boot Whitelabel error page включена. Whitelabel страница раскрывает
+    путь запроса, HTTP метод, статус-код и иногда детали исключения в HTML-ответе.
+    В production отключите (server.error.whitelabel.enabled=false) и замените
+    кастомной error страницей без технических деталей.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-custom-error-page-returns-stack
+  patterns:
+    - pattern: |
+        @RequestMapping("/error")
+        public $RET handleError(HttpServletRequest $REQ) {
+          Exception $E = (Exception) $REQ.getAttribute(
+              "javax.servlet.error.exception");
+          return ResponseEntity.status($STATUS).body($E.getMessage());
+        }
+  message: |
+    Кастомная /error страница возвращает getMessage() из атрибута запроса.
+    javax.servlet.error.exception содержит реальное исключение с полными деталями.
+    Это обходит все @ExceptionHandler и раскрывает детали через endpoint ошибки.
+    Возвращайте только correlation ID и generic message.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-debug-mode-exception-details
+  patterns:
+    - pattern-either:
+      - pattern: debug=true
+      - pattern: spring.mvc.log-resolved-exception=true
+  message: |
+    Debug-режим или логирование resolved exceptions включено. В этом режиме
+    Spring выводит детали исключений в логи и потенциально в ответы.
+    В production это раскрывает внутреннюю структуру, пути, версии библиотек.
+    Убедитесь что debug=false и spring.mvc.log-resolved-exception=false в production.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-exception-handler-missing-security-types
+  patterns:
+    - pattern: |
+        @ControllerAdvice
+        class $ADVICE {
+          @ExceptionHandler(Exception.class)
+          public $RET handleGeneric(Exception $E) { ... }
+        }
+    - pattern-not-inside: |
+        @ExceptionHandler(AccessDeniedException.class)
+    - pattern-not-inside: |
+        @ExceptionHandler(AuthenticationException.class)
+  message: |
+    @ControllerAdvice обрабатывает только generic Exception без отдельных
+    обработчиков для security-исключений. AccessDeniedException и
+    AuthenticationException требуют специфической обработки (403/401 без деталей)
+    и не должны попадать в generic catch с getMessage(). Добавьте явные
+    @ExceptionHandler для security-типов.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
+
+- id: java-error-response-includes-request-params
+  patterns:
+    - pattern-either:
+      - pattern: |
+          @ExceptionHandler
+          public ResponseEntity<?> handle($EX $E, HttpServletRequest $REQ) {
+            return ResponseEntity.badRequest().body(
+                "Error processing: " + $REQ.getQueryString());
+          }
+      - pattern: |
+          model.addAttribute("error",
+              "Invalid request: " + $REQ.getParameter($PARAM));
+  message: |
+    Тело ответа об ошибке включает параметры оригинального запроса.
+    Параметры запроса могут содержать PII, credentials, токены.
+    Отражение параметров обратно клиенту также создаёт XSS-вектор если
+    ответ HTML. Никогда не включайте user-input в error response.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-209
+    owasp: A10:2025 - Mishandling of Exceptional Conditions
