@@ -1,1 +1,1263 @@
 # A08:2025 – Software or Data Integrity Failures
+
+rules:
+
+# Небезопасная десериализация — Java Native
+
+- id: java-insecure-deserialization-objectinputstream
+  patterns:
+    - pattern-either:
+      - pattern: |
+          ObjectInputStream $OIS = new ObjectInputStream($STREAM);
+          ...
+          $OIS.readObject();
+      - pattern: |
+          new ObjectInputStream($REQ.getInputStream()).readObject();
+  message: |
+    Небезопасная десериализация через ObjectInputStream.readObject() без whitelist-фильтра.
+    Позволяет выполнить произвольный код через gadget-цепочки (Apache Commons Collections,
+    Spring, Hibernate и др.). Используйте ValidatingObjectInputStream из Apache Commons IO
+    или реализуйте собственный ObjectInputFilter (Java 9+) с явным разрешённым списком классов.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+    references:
+      - https://owasp.org/Top10/A08_2025-Software_or_Data_Integrity_Failures/
+
+- id: java-deserialization-without-object-filter
+  patterns:
+    - pattern: |
+        ObjectInputStream $OIS = new ObjectInputStream($STREAM);
+    - pattern-not: |
+        $OIS.setObjectInputFilter($FILTER);
+  message: |
+    ObjectInputStream создаётся без ObjectInputFilter (Java 9+). Без фильтра
+    любой класс из classpath может быть десериализован. Установите фильтр через
+    ObjectInputFilter.Config.createFilter("com.example.*;!*") до первого вызова readObject().
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-xstream-unsafe
+  patterns:
+    - pattern-either:
+      - pattern: |
+          XStream $XS = new XStream();
+          ...
+          $XS.fromXML($INPUT);
+      - pattern: |
+          new XStream().fromXML($USER_INPUT);
+    - pattern-not: |
+        $XS.setupDefaultSecurity($XS);
+  message: |
+    XStream десериализует XML без настройки безопасности. Позволяет выполнить
+    произвольный код через CVE-2021-29505 и аналогичные уязвимости. Вызовите
+    XStream.setupDefaultSecurity() и явно укажите разрешённые классы через
+    addPermission() или allowTypeHierarchy().
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-xmldecoder-unsafe
+  patterns:
+    - pattern-either:
+      - pattern: |
+          XMLDecoder $DECODER = new XMLDecoder($STREAM);
+          ...
+          $DECODER.readObject();
+      - pattern: |
+          new XMLDecoder(new BufferedInputStream(new FileInputStream($USER_INPUT))).readObject();
+  message: |
+    XMLDecoder.readObject() десериализует Java-бины из XML. Это эквивалент
+    ObjectInputStream по опасности — любой XML с вызовами Runtime.exec() выполнит
+    произвольные команды. Никогда не передавайте пользовательский ввод в XMLDecoder.
+    Используйте JAXB или Jackson с явными схемами.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-jackson-default-typing
+  patterns:
+    - pattern-either:
+      - pattern: |
+          $MAPPER.enableDefaultTyping();
+      - pattern: |
+          $MAPPER.enableDefaultTyping($TYPE);
+      - pattern: |
+          $MAPPER.activateDefaultTyping($PTH);
+  message: |
+    Jackson ObjectMapper с enableDefaultTyping()/activateDefaultTyping() включает
+    полиморфную десериализацию произвольных типов — это открывает путь к RCE
+    через gadget-классы (CVE-2017-7525 и сотни последующих CVE). Используйте
+    @JsonTypeInfo с явным whitelist-классов через BasicPolymorphicTypeValidator.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-kryo-without-registration
+  patterns:
+    - pattern: |
+        Kryo $KRYO = new Kryo();
+        ...
+        $KRYO.readClassAndObject($INPUT);
+    - pattern-not: |
+        $KRYO.setRegistrationRequired(true);
+  message: |
+    Kryo десериализует без обязательной регистрации классов (setRegistrationRequired=false
+    по умолчанию). Это позволяет вставить произвольный тип в поток данных. Включите
+    setRegistrationRequired(true) и явно регистрируйте только нужные классы.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-yaml-unsafe-constructor
+  patterns:
+    - pattern-either:
+      - pattern: |
+          new Yaml().load($USER_INPUT);
+      - pattern: |
+          new Yaml(new Constructor($CLASS)).load($INPUT);
+      - pattern: |
+          Yaml $YAML = new Yaml();
+          ...
+          $YAML.load($USER_INPUT);
+  message: |
+    SnakeYAML Yaml.load() с пользовательским вводом позволяет выполнить произвольный
+    код через YAML-теги (!! java.lang.Runtime и т.п.). Используйте SafeConstructor:
+    new Yaml(new SafeConstructor()) или Yaml.safeLoad() для ненадёжных данных.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-base64-objectinputstream
+  patterns:
+    - pattern-either:
+      - pattern: |
+          byte[] $BYTES = Base64.getDecoder().decode($USER_INPUT);
+          ...
+          new ObjectInputStream(new ByteArrayInputStream($BYTES)).readObject();
+      - pattern: |
+          ObjectInputStream $OIS = new ObjectInputStream(
+              new ByteArrayInputStream(Base64.decodeBase64($INPUT)));
+          $OIS.readObject();
+  message: |
+    Base64-декодированные данные от пользователя передаются напрямую в ObjectInputStream.
+    Классический паттерн deserialization-атаки через cookie/сессию/параметр. Атакующий
+    кодирует сериализованный gadget-объект в Base64 и передаёт его в параметр.
+    Не десериализуйте данные от пользователя без строгой валидации и ObjectInputFilter.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-rmi-registry-unsafe
+  patterns:
+    - pattern-either:
+      - pattern: |
+          LocateRegistry.createRegistry($PORT);
+      - pattern: |
+          Registry $REG = LocateRegistry.getRegistry($HOST, $PORT);
+          ...
+          $REG.lookup($NAME);
+  message: |
+    RMI Registry открывает endpoint с Java-сериализацией. Любой клиент, способный
+    подключиться к RMI, может отправить вредоносный сериализованный объект.
+    RMI реестр не должен быть доступен из публичной сети. Используйте JMX с
+    аутентификацией или REST API вместо RMI для внешних сервисов.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-serializable-readobject-no-validation
+  patterns:
+    - pattern: |
+        class $CLASS implements Serializable {
+          ...
+          private void readObject(ObjectInputStream $OIS) throws ... {
+            $OIS.defaultReadObject();
+            ...
+          }
+        }
+    - pattern-not-inside: |
+        if ($FIELD == null || ...) {
+          throw new InvalidObjectException(...);
+        }
+  message: |
+    Метод readObject() вызывает defaultReadObject() без последующей валидации
+    десериализованных полей. Атакующий может сформировать объект с невалидным
+    состоянием (null-поля, отрицательные числа, невалидные ссылки). Добавьте
+    проверки инвариантов сразу после defaultReadObject() и выбрасывайте
+    InvalidObjectException при нарушении.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+# Проверка целостности
+
+- id: java-file-download-no-integrity-check
+  patterns:
+    - pattern-either:
+      - pattern: |
+          URL $URL = new URL($REMOTE_URL);
+          ...
+          $URL.openStream();
+      - pattern: |
+          HttpURLConnection $CONN = (HttpURLConnection) new URL($REMOTE).openConnection();
+          ...
+          $CONN.getInputStream();
+    - pattern-not-inside: |
+        MessageDigest $MD = MessageDigest.getInstance(...);
+  message: |
+    Скачивание файла с удалённого URL без проверки контрольной суммы или цифровой подписи.
+    Атакующий (MITM, скомпрометированный CDN) может подменить содержимое. После загрузки
+    вычислите SHA-256 и сравните с заранее известным хешем (из HTTPS-защищённого источника).
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-345
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-weak-checksum-md5-integrity
+  patterns:
+    - pattern-either:
+      - pattern: |
+          MessageDigest.getInstance("MD5");
+      - pattern: |
+          DigestUtils.md5Hex($DATA);
+      - pattern: |
+          DigestUtils.md5($DATA);
+  message: |
+    MD5 используется для проверки целостности данных. MD5 криптографически сломан
+    (коллизии за секунды), атакующий может создать два разных файла с одинаковым MD5.
+    Используйте SHA-256 или SHA-3 для проверки целостности. MD5 допустим только
+    как некриптографический checksum (не для безопасности).
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-328
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-weak-checksum-sha1-integrity
+  patterns:
+    - pattern-either:
+      - pattern: |
+          MessageDigest.getInstance("SHA-1");
+      - pattern: |
+          DigestUtils.sha1Hex($DATA);
+      - pattern: |
+          DigestUtils.sha1($DATA);
+  message: |
+    SHA-1 используется для проверки целостности. SHA-1 считается небезопасным с 2017 года
+    (SHAttered атака). Для проверки целостности артефактов, подписей, цепочек доверия
+    используйте SHA-256 или SHA-512.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-328
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-missing-hmac-on-serialized-data
+  patterns:
+    - pattern: |
+        ByteArrayOutputStream $BAOS = new ByteArrayOutputStream();
+        ObjectOutputStream $OOS = new ObjectOutputStream($BAOS);
+        $OOS.writeObject($OBJ);
+        ...
+        $RESP.getOutputStream().write($BAOS.toByteArray());
+    - pattern-not-inside: |
+        Mac $MAC = Mac.getInstance(...);
+  message: |
+    Сериализованные данные отправляются клиенту без HMAC-подписи. Клиент может
+    изменить байты и вернуть модифицированный объект. Всегда подписывайте сериализованные
+    данные HMAC-SHA256 перед отправкой и проверяйте подпись при получении.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-345
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-trust-all-certificates
+  patterns:
+    - pattern-either:
+      - pattern: |
+          new X509TrustManager() {
+            public void checkClientTrusted(...) {}
+            public void checkServerTrusted(...) {}
+            public X509Certificate[] getAcceptedIssuers() { return null; }
+          }
+      - pattern: |
+          $TM.checkServerTrusted($CHAIN, $AUTH) { }
+  message: |
+    X509TrustManager реализован с пустыми методами проверки — принимаются любые
+    сертификаты, включая самоподписанные и истёкшие. Это полностью отключает TLS-верификацию
+    и открывает MITM-атаку. Используйте системный TrustManager или настройте
+    собственный TrustStore с доверенными CA.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-295
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-hostname-verifier-disabled
+  patterns:
+    - pattern-either:
+      - pattern: |
+          HttpsURLConnection.setDefaultHostnameVerifier(($HOST, $SESSION) -> true);
+      - pattern: |
+          $CONN.setHostnameVerifier(($HOST, $SESSION) -> true);
+      - pattern: |
+          $CONN.setHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+      - pattern: |
+          $CONN.setHostnameVerifier(NoopHostnameVerifier.INSTANCE);
+  message: |
+    HostnameVerifier полностью отключён (всегда возвращает true). Сертификат любого
+    хоста будет принят даже при несовпадении имени — MITM-атака тривиальна.
+    Используйте DefaultHostnameVerifier или настройте SSLContext с правильным
+    HostnameVerifier.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-297
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-missing-certificate-pinning
+  patterns:
+    - pattern-inside: |
+        HttpsURLConnection $CONN = (HttpsURLConnection) new URL($URL).openConnection();
+        ...
+    - pattern-not-inside: |
+        $CONN.setSSLSocketFactory($PINNING_FACTORY);
+  message: |
+    HTTPS-соединение без certificate pinning полагается только на системные CA.
+    При компрометации CA (или использовании корпоративного proxy-сертификата)
+    возможна MITM-атака. Для критичных соединений (банки, платёжные системы)
+    реализуйте certificate/public key pinning через кастомный SSLSocketFactory.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-295
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-jar-loading-without-code-signing
+  patterns:
+    - pattern-either:
+      - pattern: |
+          URLClassLoader $UCL = new URLClassLoader(new URL[]{new URL($JAR_PATH)});
+      - pattern: |
+          new URLClassLoader(new URL[]{new URL($REMOTE_URL)}).loadClass($CLASS);
+    - pattern-not-inside: |
+        JarFile $JAR = new JarFile($FILE, true);
+  message: |
+    Динамическая загрузка JAR-файла без проверки цифровой подписи. Если файл
+    загружается из ненадёжного источника или по HTTP, атакующий может подменить
+    его вредоносным кодом. Проверяйте JarFile с verify=true и верифицируйте
+    подпись через JarEntry.getCodeSigners() перед выполнением кода.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-remote-jar-loading
+  patterns:
+    - pattern: |
+        new URLClassLoader(new URL[]{new URL("http://" + $HOST + "/" + $PATH)});
+    - pattern: |
+        URLClassLoader.newInstance(new URL[]{new URL($REMOTE_HTTP_URL)});
+  message: |
+    Загрузка JAR по HTTP (не HTTPS) без верификации целостности. Соединение не
+    зашифровано и не защищено от подмены. Используйте только HTTPS с проверкой
+    сертификата и контрольной суммой для загрузки кода из внешних источников.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+# Динамическая загрузка классов - Reflection
+
+- id: java-class-forname-user-input
+  patterns:
+    - pattern-either:
+      - pattern: |
+          Class.forName($REQ.getParameter($PARAM));
+      - pattern: |
+          Class.forName($USER_INPUT);
+      - pattern: |
+          Class.forName($USER_INPUT, true, $LOADER);
+  message: |
+    Class.forName() вызывается с пользовательским вводом — позволяет загрузить
+    произвольный класс из classpath. Атакующий может инициализировать класс
+    с вредоносными статическими блоками или создать объекты для последующей атаки.
+    Используйте явный whitelist допустимых имён классов и проверяйте перед загрузкой.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-470
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-urlclassloader-user-input
+  patterns:
+    - pattern-either:
+      - pattern: |
+          new URLClassLoader(new URL[]{new URL($USER_INPUT)});
+      - pattern: |
+          URLClassLoader $CL = URLClassLoader.newInstance(new URL[]{new URL($USER_INPUT)});
+  message: |
+    URLClassLoader создаётся из пользовательского URL — атакующий может указать
+    произвольный JAR на подконтрольном сервере, загрузить вредоносный класс и
+    получить RCE. Никогда не передавайте пользовательский ввод в URLClassLoader напрямую.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-470
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-reflection-method-invoke-user-input
+  patterns:
+    - pattern-either:
+      - pattern: |
+          Method $METHOD = $CLASS.getMethod($USER_INPUT);
+          ...
+          $METHOD.invoke($OBJ, $ARGS);
+      - pattern: |
+          $CLASS.getMethod($REQ.getParameter($PARAM)).invoke($OBJ);
+  message: |
+    Reflection Method.invoke() вызывается с именем метода из пользовательского
+    ввода. Атакующий может вызвать любой публичный метод объекта, включая
+    деструктивные (shutdown, delete, exec). Используйте явный Map<String, Runnable>
+    с разрешёнными операциями вместо рефлексии.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-470
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-groovy-classloader-user-input
+  patterns:
+    - pattern-either:
+      - pattern: |
+          GroovyClassLoader $GCL = new GroovyClassLoader();
+          ...
+          $GCL.parseClass($USER_INPUT);
+      - pattern: |
+          new GroovyClassLoader().loadClass($USER_INPUT);
+  message: |
+    GroovyClassLoader компилирует и загружает класс из пользовательского кода.
+    Это прямой Remote Code Execution без ограничений. Никогда не компилируйте
+    пользовательский Groovy без полноценного AST-трансформационного sandboxing
+    (например, Groovy Sandbox от Jenkins).
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-470
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-dynamic-proxy-unvalidated
+  patterns:
+    - pattern: |
+        Proxy.newProxyInstance($LOADER, $INTERFACES, ($PROXY, $METHOD, $ARGS) -> {
+          ...
+          $METHOD.invoke($TARGET, $ARGS);
+        });
+    - pattern-not-inside: |
+        if (!allowedMethods.contains($METHOD.getName())) { throw ...; }
+  message: |
+    Dynamic Proxy без whitelist разрешённых методов перенаправляет все вызовы
+    на target. Если proxy используется в RPC-контексте, атакующий может вызвать
+    нежелательные методы. Добавьте явный список разрешённых методов в InvocationHandler.
+  severity: MEDIUM
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-470
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+# Supply chain / зависимости
+
+- id: java-maven-repository-http
+  patterns:
+    - pattern-regex: "<url>http://[^<]*</url>"
+    - pattern-not-regex: "<url>https://[^<]*</url>"
+  message: |
+    Maven репозиторий использует HTTP вместо HTTPS. Зависимости могут быть
+    подменены при MITM-атаке (Dependency Confusion, пакетная подмена). Всегда
+    используйте https:// для репозиториев Maven/Nexus/Artifactory. Включите
+    checksum verification в settings.xml (checksumPolicy=fail).
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-maven-snapshot-in-production
+  patterns:
+    - pattern-regex: "<version>[0-9.-]*SNAPSHOT</version>"
+  message: |
+    SNAPSHOT-зависимость в проекте. SNAPSHOT версии изменяются без предупреждения —
+    повторная сборка может включить другой код. В production используйте только
+    зафиксированные версии с проверкой controll суммы.
+    Включите <updatePolicy>never</updatePolicy> для release-репозиториев.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-classloader-from-network-resource
+  patterns:
+    - pattern: |
+        ClassLoader $CL = Thread.currentThread().getContextClassLoader();
+        ...
+        $CL.loadClass($USER_SUPPLIED_CLASS);
+  message: |
+    Context ClassLoader используется для загрузки класса по имени из
+    пользовательского ввода. Атакующий может указать имя опасного класса из
+    classpath. Применяйте явный whitelist имён допустимых классов.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-470
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-plugin-loading-without-signature-check
+  patterns:
+    - pattern: |
+        File $PLUGIN_JAR = new File($PLUGIN_DIR, $PLUGIN_NAME);
+        URLClassLoader $UCL = new URLClassLoader(new URL[]{$PLUGIN_JAR.toURI().toURL()});
+        ...
+        $UCL.loadClass($CLASS_NAME);
+    - pattern-not-inside: |
+        verifySignature($PLUGIN_JAR);
+  message: |
+    Плагин загружается из файловой системы без проверки цифровой подписи.
+    Если директория плагинов доступна для записи внешним пользователям, атакующий
+    может подложить вредоносный JAR. Подписывайте плагины и проверяйте подпись
+    перед загрузкой через JarFile.getManifest() / CodeSigner.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+# Обновления без проверки целостности
+
+- id: java-auto-update-over-http
+  patterns:
+    - pattern-either:
+      - pattern: |
+          URL $UPDATE_URL = new URL("http://" + $HOST + "/update");
+          ...
+          $UPDATE_URL.openStream();
+      - pattern: |
+          HttpURLConnection $CONN = (HttpURLConnection) new URL("http://" + $UPDATE_SERVER + $PATH).openConnection();
+  message: |
+    Обновление загружается по HTTP без шифрования и без проверки целостности.
+    Атакующий MITM может подменить обновление вредоносным файлом. Используйте
+    только HTTPS для получения обновлений и верифицируйте цифровую подпись
+    артефакта перед применением.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-auto-update-no-signature-verification
+  patterns:
+    - pattern: |
+        File $UPDATE = downloadUpdate($URL);
+        ...
+        applyUpdate($UPDATE);
+    - pattern-not-inside: |
+        verifySignature($UPDATE, $PUBLIC_KEY);
+  message: |
+    Механизм автообновления применяет файл без проверки цифровой подписи.
+    Компрометация сервера обновлений или MITM позволит атакующему распространить
+    вредоносный код на все экземпляры приложения. Подписывайте артефакты
+    обновлений RSA/EC-ключом и верифицируйте подпись на клиенте.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-download-and-exec-without-verify
+  patterns:
+    - pattern-either:
+      - pattern: |
+          URL $URL = new URL($REMOTE);
+          ...
+          Files.copy($URL.openStream(), $PATH);
+          ...
+          Runtime.getRuntime().exec($PATH.toString());
+      - pattern: |
+          $FILE = downloadFile($URL);
+          ...
+          new ProcessBuilder($FILE).start();
+  message: |
+    Файл загружается из сети и сразу выполняется без проверки целостности.
+    Это максимально опасный паттерн supply chain атаки. Обязательно проверяйте
+    SHA-256 и цифровую подпись загруженного файла перед запуском.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+# Целостность данных (JSON/ XML/ Cookie)
+
+- id: java-cookie-deserialization-without-hmac
+  patterns:
+    - pattern-either:
+      - pattern: |
+          String $COOKIE = $REQ.getCookies()[...].getValue();
+          byte[] $BYTES = Base64.getDecoder().decode($COOKIE);
+          ObjectInputStream $OIS = new ObjectInputStream(new ByteArrayInputStream($BYTES));
+          $OIS.readObject();
+  message: |
+    Данные cookie десериализуются как Java-объект без HMAC-проверки. Атакующий
+    может создать вредоносный сериализованный объект, закодировать в Base64 и
+    подставить в cookie. Никогда не храните сериализованные объекты в cookie.
+    Используйте JWT с HMAC или шифрованием для хранения данных сессии.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-session-attribute-deserialization
+  patterns:
+    - pattern: |
+        Object $OBJ = $SESSION.getAttribute($ATTR);
+        ...
+        ($TYPE) $OBJ;
+    - pattern-not-inside: |
+        if (!($OBJ instanceof $EXPECTED_TYPE)) { throw ...; }
+  message: |
+    Атрибут сессии извлекается и приводится к типу без проверки instanceof.
+    При использовании распределённых сессий (Redis/Memcached/Hazelcast) данные
+    десериализуются из внешнего хранилища. Атакующий с доступом к Redis может
+    подменить значение. Всегда проверяйте тип через instanceof перед cast.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-jackson-readvalue-polymorph-input
+  patterns:
+    - pattern-either:
+      - pattern: |
+          $MAPPER.readValue($USER_INPUT, Object.class);
+      - pattern: |
+          $MAPPER.readValue($REQ.getInputStream(), Map.class);
+      - pattern: |
+          $MAPPER.readValue($USER_JSON, LinkedHashMap.class);
+  message: |
+    Jackson readValue() в тип Object/Map/LinkedHashMap без валидации схемы.
+    Если enableDefaultTyping включён — возможна десериализация произвольных типов.
+    Используйте строго типизированные POJO-классы и валидируйте JSON по JSON Schema
+    до десериализации.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-xml-signature-not-verified
+  patterns:
+    - pattern: |
+        DocumentBuilderFactory $DBF = DocumentBuilderFactory.newInstance();
+        ...
+        Document $DOC = $DBF.newDocumentBuilder().parse($INPUT);
+    - pattern-not-inside: |
+        XMLSignatureFactory $XSF = XMLSignatureFactory.getInstance(...);
+        ...
+        $XSF.unmarshalXMLSignature($CTX).validate($VAL_CTX);
+  message: |
+    XML-документ парсится без проверки XML Digital Signature (XMLDSig).
+    При обработке критичных XML (SAML, платёжные документы, конфиги) отсутствие
+    проверки подписи позволяет атакующему подделать содержимое. Для защищённых
+    документов используйте javax.xml.crypto.dsig для верификации.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-345
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-saml-signature-bypass
+  patterns:
+    - pattern-either:
+      - pattern: |
+          $RESPONSE = $UNMARSHALLER.unmarshall($ELEMENT);
+          ...
+          $ASSERTION = $RESPONSE.getAssertions().get(0);
+      - pattern: |
+          SAMLObject $OBJ = $UNMARSHALLER.unmarshall($ELEMENT);
+    - pattern-not-inside: |
+        SAMLSignatureProfileValidator $VAL = new SAMLSignatureProfileValidator();
+        $VAL.validate($SIGNATURE);
+  message: |
+    SAML Response/Assertion разбирается без проверки подписи. Это позволяет
+    провести SAML Signature Wrapping Attack — атакующий вставляет свой Assertion
+    рядом с оригинальным подписанным. Всегда валидируйте подпись до использования
+    атрибутов из SAML-ответа.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-347
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-json-web-token-none-alg
+  patterns:
+    - pattern-either:
+      - pattern: |
+          Jwts.parserBuilder().build().parseClaimsJws($TOKEN);
+      - pattern: |
+          JWT.decode($TOKEN);
+      - pattern: |
+          Jwts.parser().parse($TOKEN);
+    - pattern-not-inside: |
+        .setSigningKey($SECRET)
+  message: |
+    JWT парсится без верификации подписи — любой токен принимается как валидный.
+    Атакующий может создать токен с произвольными claims (admin: true, role: admin).
+    Всегда используйте .setSigningKey() / .verifyWith() для проверки подписи.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-347
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-object-deserialization-redis-cache
+  patterns:
+    - pattern-either:
+      - pattern: |
+          $REDIS.get($KEY);
+          ...
+          $SERIALIZER.deserialize($DATA);
+      - pattern: |
+          $JEDIS.get($KEY.getBytes());
+          ...
+          SerializationUtils.deserialize($BYTES);
+  message: |
+    Данные из Redis десериализуются без проверки целостности или типа. Redis
+    без аутентификации или с истёкшими credentials позволяет подменить данные.
+    Используйте JSON (не Java-сериализацию) с валидацией схемы, или добавьте
+    HMAC-проверку перед десериализацией.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+# Скрипты и исполняемый код без проверки
+
+- id: java-scriptengine-user-code
+  patterns:
+    - pattern-either:
+      - pattern: |
+          ScriptEngine $ENGINE = new ScriptEngineManager().getEngineByName($NAME);
+          ...
+          $ENGINE.eval($USER_INPUT);
+      - pattern: |
+          $ENGINE.eval($REQ.getParameter("script"));
+  message: |
+    ScriptEngine выполняет пользовательский код без sandbox и без верификации
+    источника скрипта. Это Remote Code Execution. Кроме валидации input,
+    скрипты должны быть подписаны и верифицированы перед выполнением, если
+    они приходят из внешних источников (конфиги, плагины, правила).
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-94
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-bytecode-manipulation-unsafe-asm
+  patterns:
+    - pattern-either:
+      - pattern: |
+          ClassWriter $CW = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+          ...
+          $CW.visitMethod($USER_ACCESS, $USER_NAME, $USER_DESC, ...);
+      - pattern: |
+          new ClassReader($USER_INPUT).accept($CV, 0);
+  message: |
+    ASM ClassReader/ClassWriter обрабатывает пользовательские байткод-данные без
+    верификации источника. Позволяет внедрить произвольный байткод в JVM.
+    Байткод для трансформации должен поступать только из доверенных и верифицированных
+    источников (подписанные JAR, встроенные ресурсы).
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-94
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-expression-language-injection-integrity
+  patterns:
+    - pattern-either:
+      - pattern: |
+          ExpressionFactory $EF = ExpressionFactory.newInstance();
+          ...
+          $EF.createValueExpression($CTX, $USER_INPUT, $TYPE);
+      - pattern: |
+          $PARSER.parseExpression($USER_INPUT).getValue($CTX);
+  message: |
+    Expression Language (EL/SpEL) выполняет выражение из пользовательского ввода.
+    Если конфигурационные выражения приходят из внешнего источника (БД, файл,
+    запрос), они должны быть верифицированы (подписаны/хешированы) и исходить
+    из доверенного источника, а не напрямую от пользователя.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-94
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+# Конфигурация и целостность CI/CD
+
+- id: java-properties-from-unverified-remote
+  patterns:
+    - pattern: |
+        Properties $PROPS = new Properties();
+        $PROPS.load(new URL($REMOTE_CONFIG_URL).openStream());
+  message: |
+    Properties загружаются из удалённого URL без проверки целостности.
+    Если URL по HTTP или конфиг-сервер скомпрометирован, конфигурация может
+    быть изменена. Используйте HTTPS и проверяйте SHA-256 конфигурационного
+    файла после загрузки, сравнивая с эталоном.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-build-output-tampering-runtime
+  patterns:
+    - pattern: |
+        String $CLASSPATH = System.getProperty("java.class.path");
+        ...
+        URLClassLoader $UCL = new URLClassLoader(
+            Arrays.stream($CLASSPATH.split(File.pathSeparator))
+                .map(p -> new File(p).toURI().toURL())
+                .toArray(URL[]::new));
+  message: |
+    ClassLoader строится из системного classpath без верификации составных JAR-файлов.
+    Если атакующий может модифицировать classpath (env-переменная, файл манифеста),
+    он внедрит вредоносный JAR. Фиксируйте classpath и верифицируйте подписи JAR
+    на старте приложения.
+  severity: MEDIUM
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-jndi-objectfactory-user-input
+  patterns:
+    - pattern-either:
+      - pattern: |
+          InitialContext $CTX = new InitialContext();
+          $CTX.lookup($USER_INPUT);
+      - pattern: |
+          new InitialContext().lookup($REQ.getParameter($PARAM));
+  message: |
+    JNDI lookup с пользовательским вводом (Log4Shell-паттерн). Кроме известного
+    Log4Shell (CVE-2021-44228), прямой JNDI lookup позволяет загрузить произвольный
+    объект из LDAP/RMI-сервера атакующего. Никогда не передавайте пользовательский
+    ввод в JNDI lookup. Устанавите com.sun.jndi.rmi.object.trustURLCodebase=false.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-74
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+# Дополнительные и специфические кейсы
+
+- id: java-deserialization-hessian-unsafe
+  patterns:
+    - pattern-either:
+      - pattern: |
+          HessianInput $HI = new HessianInput($STREAM);
+          $HI.readObject();
+      - pattern: |
+          HessianProxyFactory $FACTORY = new HessianProxyFactory();
+          $FACTORY.create($IFACE, $URL);
+  message: |
+    Hessian бинарный протокол десериализует данные без белого списка классов.
+    Hessian-десериализация уязвима к gadget-атакам (CVE-серия в Apache Dubbo).
+    Используйте Hessian с явным WhitelistSerializerFactory или переходите на
+    безопасные альтернативы (JSON/Protobuf).
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-ois-in-catch-ignored
+  patterns:
+    - pattern: |
+        try {
+          ...
+          $OIS.readObject();
+          ...
+        } catch (ClassNotFoundException $E) {
+          $LOG.warn(...);
+        }
+    - pattern-not-inside: |
+        catch (InvalidClassException $E) { throw ...; }
+  message: |
+    ClassNotFoundException при десериализации логируется и игнорируется.
+    Это маскирует ошибки и потенциальные эксплойты, скрывает попытки загрузить
+    несуществующие классы gadget-цепочки. ClassNotFoundException при readObject()
+    должен вызывать прерывание операции, а не продолжение с частично созданным объектом.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-unsafe-object-cast-after-deserialize
+  patterns:
+    - pattern: |
+        Object $OBJ = $OIS.readObject();
+        $TYPE $RESULT = ($TYPE) $OBJ;
+    - pattern-not-inside: |
+        if ($OBJ instanceof $TYPE) { ... }
+  message: |
+    Прямой cast десериализованного объекта без проверки instanceof.
+    Атакующий может подменить сериализованный тип и вызвать ClassCastException
+    или спровоцировать непредвиденное поведение. Всегда проверяйте
+    instanceof после readObject() до приведения типа.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-in-requestmapping
+  patterns:
+    - pattern-inside: |
+        @RequestMapping(...)
+        public $RET $METHOD(...) { ... }
+    - pattern-either:
+      - pattern: |
+          ObjectInputStream $OIS = new ObjectInputStream($REQ.getInputStream());
+          $OIS.readObject();
+      - pattern: |
+          $DESERIALIZER.deserialize($REQ.getBody());
+  message: |
+    Десериализация Java-объектов прямо из HTTP Request Body в REST/MVC контроллере.
+    Если Content-Type: application/x-java-serialized-object принимается и обрабатывается,
+    любой HTTP-клиент может прислать вредоносный payload. Используйте JSON/XML
+    с типизированными DTO вместо бинарной Java-сериализации.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-serialization-to-public-endpoint
+  patterns:
+    - pattern-inside: |
+        @GetMapping(...)
+        public $RET $METHOD(...) { ... }
+    - pattern: |
+        ObjectOutputStream $OOS = new ObjectOutputStream($RESP.getOutputStream());
+        $OOS.writeObject($OBJ);
+  message: |
+    Сериализованный Java-объект отдаётся как HTTP-ответ через GET endpoint.
+    Это раскрывает внутреннюю структуру объектов и потенциально позволяет
+    клиенту вернуть модифицированный объект назад. Используйте JSON/XML для
+    передачи данных через публичные API.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-insecure-file-integrity-crc32
+  patterns:
+    - pattern-either:
+      - pattern: |
+          CRC32 $CRC = new CRC32();
+          ...
+          $CRC.getValue();
+      - pattern: |
+          Checksum $CS = new CRC32();
+  message: |
+    CRC32 используется для проверки целостности. CRC — некриптографическая
+    контрольная сумма, легко подделывается (можно найти данные с нужным CRC).
+    Для security-задач используйте HMAC-SHA256 или минимум SHA-256.
+    CRC допустим только для проверки случайных ошибок передачи, не для защиты
+    от атакующих.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-328
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-externalized-config-no-integrity
+  patterns:
+    - pattern: |
+        ConfigurableEnvironment $ENV = $CTX.getEnvironment();
+        ...
+        $ENV.getPropertySources().addFirst(
+            new ResourcePropertySource(new ClassPathResource($EXTERNAL_PATH)));
+  message: |
+    Внешний конфигурационный файл загружается без верификации хеша или подписи.
+    В CI/CD pipeline конфиги могут быть подменены атакующим с доступом к
+    конфигурационному хранилищу. Храните хеши конфигурационных файлов в
+    защищённом месте (Vault, HSM) и проверяйте при старте.
+  severity: MEDIUM
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-weak-random-for-integrity-token
+  patterns:
+    - pattern-either:
+      - pattern: |
+          Random $RND = new Random();
+          ...
+          $RND.nextBytes($TOKEN);
+      - pattern: |
+          long $TOKEN = new Random().nextLong();
+      - pattern: |
+          String $CSRF = Long.toHexString(new Random().nextLong());
+  message: |
+    java.util.Random (не SecureRandom) используется для генерации токена целостности
+    (CSRF, integrity token, download token). Random предсказуем и может быть
+    угадан атакующим. Используйте java.security.SecureRandom для всех
+    security-критичных токенов.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-338
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-spring-remoting
+  patterns:
+    - pattern-either:
+      - pattern: |
+          RemoteInvocationSerializingExporter $EXPORTER = new RemoteInvocationSerializingExporter();
+      - pattern: |
+          HttpInvokerServiceExporter $EXPORTER = new HttpInvokerServiceExporter();
+      - pattern: |
+          RmiServiceExporter $EXPORTER = new RmiServiceExporter();
+  message: |
+    Spring Remoting (HTTP Invoker, RMI Exporter) использует Java-сериализацию
+    для передачи вызовов. Эти механизмы уязвимы к десериализационным атакам
+    на стороне сервера. Мигрируйте на Spring REST / gRPC / Protobuf вместо
+    Spring Remoting с бинарной сериализацией.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-java-agent-without-signature
+  patterns:
+    - pattern: |
+        Instrumentation $INST = $AGENT.getInstrumentation();
+        ...
+        $INST.addTransformer($TRANSFORMER);
+    - pattern-not-inside: |
+        verifyAgentSignature($AGENT_JAR);
+  message: |
+    Java Agent добавляет ClassFileTransformer без проверки подписи агента.
+    Вредоносный агент может модифицировать байткод любого класса в JVM.
+    Java Agents должны загружаться только из доверенных, подписанных JAR-файлов,
+    а их подпись должна проверяться перед attach.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-494
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-activemq-message
+  patterns:
+    - pattern-either:
+      - pattern: |
+          ObjectMessage $MSG = (ObjectMessage) $MESSAGE;
+          $MSG.getObject();
+      - pattern: |
+          Message $MSG = $CONSUMER.receive();
+          ...
+          ((ObjectMessage) $MSG).getObject();
+  message: |
+    JMS ObjectMessage.getObject() десериализует Java-объект из очереди сообщений.
+    Если брокер (ActiveMQ, RabbitMQ) не имеет строгой ACL, атакующий может
+    отправить вредоносное сообщение. Используйте TextMessage с JSON/XML и
+    десериализуйте в конкретный тип с валидацией. CVE-2015-5254 (Apache ActiveMQ).
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-unsafe-reflection-for-config
+  patterns:
+    - pattern: |
+        String $CLASS_NAME = $CONFIG.getString($KEY);
+        Class<?> $CLASS = Class.forName($CLASS_NAME);
+        $CLASS.getDeclaredConstructor().newInstance();
+  message: |
+    Имя класса берётся из конфигурации и инстанциируется через рефлексию.
+    Если конфигурация может быть изменена извне (ENV, удалённый конфиг-сервер),
+    атакующий может указать вредоносный класс. Используйте явный Map<String, Supplier<?>>
+    с заранее зарегистрированными классами вместо рефлексии из конфига.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-470
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-zip-slip-on-extract
+  patterns:
+    - pattern: |
+        ZipEntry $ENTRY = $ZIS.getNextEntry();
+        ...
+        File $FILE = new File($DEST, $ENTRY.getName());
+        ...
+        Files.copy($ZIS, $FILE.toPath());
+    - pattern-not-inside: |
+        if (!$FILE.getCanonicalPath().startsWith($DEST.getCanonicalPath())) {
+          throw ...;
+        }
+  message: |
+    Zip Slip уязвимость: ZipEntry.getName() не валидируется на path traversal
+    (../../etc/cron.d/backdoor). Атакующий может создать ZIP с entry вида
+    "../../somefile" и перезаписать произвольные файлы системы. Всегда проверяйте
+    что getCanonicalPath() находится внутри целевой директории.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-22
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-kryo-unsafe-register
+  patterns:
+    - pattern: |
+        Kryo $KRYO = new Kryo();
+        $KRYO.register(Object.class);
+  message: |
+    Kryo регистрирует Object.class — это позволяет сериализовать/десериализовать
+    любой объект. Регистрируйте только конкретные DTO-классы и включите
+    setRegistrationRequired(true) для запрета неизвестных типов.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-deserialization-protostuff-user-schema
+  patterns:
+    - pattern: |
+        Schema $SCHEMA = RuntimeSchema.getSchema($USER_CLASS);
+        ProtostuffIOUtil.mergeFrom($BYTES, $OBJ, $SCHEMA);
+  message: |
+    Protostuff десериализует данные по динамической схеме из пользовательского
+    класса. Если класс определяется из пользовательского ввода, это аналог
+    рефлексивной десериализации. Схемы должны быть жёстко определены и не
+    зависеть от внешнего ввода.
+  severity: HIGH
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-502
+    owasp: A08:2025 - Software or Data Integrity Failures
+
+- id: java-spring-expression-from-database
+  patterns:
+    - pattern: |
+        String $EXPR = $REPOSITORY.findExpressionById($ID);
+        ...
+        $PARSER.parseExpression($EXPR).getValue($CTX);
+  message: |
+    SpEL-выражение загружается из базы данных и выполняется. Если данные в БД
+    могут быть изменены атакующим (SQL Injection, скомпрометированный аккаунт),
+    он может внедрить произвольное SpEL-выражение (T(Runtime).getRuntime().exec(...)).
+    Для шаблонов из БД используйте SimpleEvaluationContext с ограниченными
+    возможностями, или полностью откажитесь от eval.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-94
+    owasp: A08:2025 - Software or Data Integrity Failures
