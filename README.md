@@ -1,26 +1,17 @@
-<div align="center">
-<h1><a id="intro"> Semgrep AppSec Java Rules </a><br></h1>
-<a href="https://docs.github.com/en"><img src="https://img.shields.io/static/v1?logo=github&logoColor=fff&label=&message=Docs&color=36393f&style=flat" alt="GitHub Docs"></a>
-<a href="https://symbl.cc/en/unicode-table"><img src="https://img.shields.io/static/v1?logo=unicode&logoColor=fff&label=&message=Unicode&color=36393f&style=flat" alt="Unicode"></a>
-<a href="https://shields.io"><img src="https://img.shields.io/static/v1?logo=shieldsdotio&logoColor=fff&label=&message=Shields&color=36393f&style=flat" alt="Shields"></a>
-<img src="https://img.shields.io/badge/git-%23F05033.svg?style=flat-square&logo=git&logoColor=white" alt="Git">
-<a href="https://www.markdownguide.org/"><img src="https://img.shields.io/badge/Markdown-000000.svg?logo=markdown&logoColor=white" alt="Markdown"></a>
+<div align="center"><h1><a id="intro"> Semgrep AppSec Java Rules </a><br></h1></div>
 
-</div>
-
-<div align="center">
-
-![Repo Size](https://img.shields.io/github/repo-size/geminishkv/semgrep_java_custom_ruleset)![License](https://img.shields.io/github/license/geminishkv/semgrep_java_custom_ruleset)![Status](https://img.shields.io/badge/status-active-success)![Contributor Badge](https://img.shields.io/badge/Contributor-%D0%A8%D0%BC%D0%B0%D0%BA%D0%BE%D0%B2_%D0%98._%D0%A1.-8b9aff?style=flat)![Contributors](https://img.shields.io/github/contributors/geminishkv/semgrep_java_custom_ruleset)![Open pull requests](https://img.shields.io/github/issues-pr/geminishkv/semgrep_java_custom_ruleset)![Commit Activity](https://img.shields.io/github/commit-activity/m/geminishkv/semgrep_java_custom_ruleset)![Last commit](https://img.shields.io/github/last-commit/geminishkv/semgrep_java_custom_ruleset)
-
-</div>
+![Repo Size](https://img.shields.io/github/repo-size/geminishkv/semgrep_java_custom_ruleset)
+![License](https://img.shields.io/github/license/geminishkv/semgrep_java_custom_ruleset)
+![Status](https://img.shields.io/badge/status-active-success)
+![Contributor Badge](https://img.shields.io/badge/Contributor-%D0%A8%D0%BC%D0%B0%D0%BA%D0%BE%D0%B2_%D0%98._%D0%A1.-8b9aff?style=flat)![Contributors](https://img.shields.io/github/contributors/geminishkv/semgrep_java_custom_ruleset)
+![Open pull requests](https://img.shields.io/github/issues-pr/geminishkv/semgrep_java_custom_ruleset)
+![Commit Activity](https://img.shields.io/github/commit-activity/m/geminishkv/semgrep_java_custom_ruleset)
+![Last commit](https://img.shields.io/github/last-commit/geminishkv/semgrep_java_custom_ruleset/main?style=flat-square&color=blue)
 
 ***
 
 <br>Салют :wave:,</br>
-
-Проект посвящен автоматизированному сканированию Java-кода на уязвимости с использованием официальных и кастомных правил Semgrep. 
-
-Проект использует официальные Java правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules) путем использования git submodule. Кастомные правила лежат в `rules/custom/`, которые построены на базе **OWASP TOP 10 - 2025**. Отчеты формируются в форматах SARIF, JSON.
+Проект посвящен автоматизированному сканированию Java-кода на уязвимости с использованием официальных и кастомных правил Semgrep. Проект использует официальные Java правила из [semgrep-rules](https://github.com/returntocorp/semgrep-rules) путем использования git submodule. Кастомные правила лежат в `rules/custom/`, которые построены на базе **OWASP TOP 10 - 2025**. Отчеты формируются в форматах SARIF, JSON.
 
 ## **Возможности**
 
@@ -50,44 +41,45 @@
 
 ## **Покрытие правил**
 
-- Всего правил: 363
-- Категорий OWASP: 7
-- Покрытие CWE: 97 уникальных категорий
-- Языки: Java (357), Dockerfile (2), YAML (1), XML (2), Properties (1)
+- Всего правил: 513
+- Категорий OWASP: 10
+- Покрытие CWE: 112 уникальных категорий
+- Включено: Java (499), Dockerfile (2), YAML (2), XML (4), Properties (6)
 
 ### Покрытие по категориям OWASP Top 10 2025
 
-<div align="center">
-
 | OWASP Категория | Файл | Правил | CRITICAL | ERROR | HIGH | WARNING | MEDIUM | INFO | CWE |
-|-----------------|------|--------|----------|-------|------|---------|--------|------|-----|
-| **A01:2025** - Broken Access Control | A01-2025.yml | 46 | 16 | 0 | 19 | 0 | 10 | 0 | 28 |
-| **A02:2025** - Security Misconfiguration | A02-2025.yml | 55 | 0 | 37 | 0 | 18 | 0 | 0 | 28 |
-| **A03:2025** - Software Supply Chain | A03-2025.yml | 50 | 0 | 25 | 0 | 18 | 0 | 7 | 11 |
-| **A04:2025** - Cryptographic Failures | A04-2025.yml | 52 | 16 | 0 | 20 | 0 | 16 | 0 | 23 |
-| **A05:2025** - Injection | A05-2025.yml | 53 | 19 | 0 | 23 | 0 | 11 | 0 | 18 |
-| **A06:2025** - Insecure Design | A06-2025.yml | 50 | 0 | 27 | 0 | 20 | 0 | 3 | 21 |
-| **A07:2025** - Authentication Failures | A07-2025.yml | 57 | 0 | 31 | 0 | 25 | 0 | 1 | 28 |
-| **ИТОГО** | **7 файлов** | **363** | **51** | **120** | **62** | **81** | **37** | **11** | **97** |
-
-</div>
+|:----------------|:----:|:------:|:--------:|:-----:|:----:|:-------:|:------:|:----:|:---:|
+| **A01:2025** – Broken Access Control | A01-2025.yml | 46 | 16 | 0 | 19 | 0 | 10 | 0 | 28 |
+| **A02:2025** – Security Misconfiguration | A02-2025.yml | 55 | 0 | 37 | 0 | 18 | 0 | 0 | 28 |
+| **A03:2025** – Software Supply Chain | A03-2025.yml | 50 | 0 | 25 | 0 | 18 | 0 | 7 | 11 |
+| **A04:2025** – Cryptographic Failures | A04-2025.yml | 52 | 16 | 0 | 20 | 0 | 16 | 0 | 23 |
+| **A05:2025** – Injection | A05-2025.yml | 53 | 19 | 0 | 23 | 0 | 11 | 0 | 18 |
+| **A06:2025** – Insecure Design | A06-2025.yml | 50 | 0 | 27 | 0 | 20 | 0 | 3 | 21 |
+| **A07:2025** – Authentication Failures | A07-2025.yml | 57 | 0 | 31 | 0 | 25 | 0 | 1 | 28 |
+| **A08:2025** – Software & Data Integrity | A08-2025.yml | 50 | 20 | 0 | 19 | 7 | 4 | 0 | 12 |
+| **A09:2025** – Logging & Alerting Failures | A09-2025.yml | 50 | 5 | 15 | 0 | 22 | 2 | 6 | 8 |
+| **A10:2025** – Exceptional Conditions | A10-2025.yml | 50 | 8 | 18 | 1 | 15 | 6 | 2 | 10 |
+| **ИТОГО** | **10 файлов** | **513** | **84** | **153** | **82** | **125** | **49** | **19** | **112** |
 
 ### Распределение по уровням серьезности
 
 | Severity | Количество | Процент |
-|----------|------------|---------|
-| CRITICAL | 51 | 14.0% |
-| ERROR | 120 | 33.1% |
-| HIGH | 62 | 17.1% |
-| WARNING | 81 | 22.3% |
-| MEDIUM | 37 | 10.2% |
-| INFO | 11 | 3.0% |
-| **ИТОГО** | **363** | **100.0%** |
+|:--------:|:----------:|:-------:|
+| CRITICAL | 84 | 16.4% |
+| ERROR | 153 | 29.8% |
+| HIGH | 82 | 16.0% |
+| WARNING | 125 | 24.4% |
+| MEDIUM | 49 | 9.6% |
+| INFO | 19 | 3.7% |
+| ETC | ~ | 0.1% |
+| **ИТОГО** | **513** | **100.0%** |
 
 ***
 
 ## **Сопроводительная информация**
 
+- [Описание категорий OWASP](assets/docs/kategory.md)
 - [JAVA правила](assets/docs/ruleset.md)
 - [Manual](assets/docs/manual.md)
 - [Integrations](assets/docs/integrations.md)
@@ -101,7 +93,7 @@
 ### Преднастройка
 
 ```bash
-SRC_DIR = app/src/main/java      # Замени в makefile путь к коду
+SRC_DIR = app/src/main/java      # Замени в makefile путь
 
 $ make init
 $ git submodule update --remote
@@ -172,9 +164,9 @@ $ git reset --hard HEAD
 │       ├── A05:2025.yml
 │       ├── A06:2025.yml
 │       ├── A07:2025.yml
-│       ├── A08:2025.yml # заглушка
-│       ├── A09:2025.yml # заглушка
-│       └── A10:2025.yml # заглушка
+│       ├── A08:2025.yml
+│       ├── A09:2025.yml
+│       └── A10:2025.yml
 └── SECURITY.md
 ```
 

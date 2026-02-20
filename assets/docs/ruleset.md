@@ -95,4 +95,36 @@
 > - Account Enumeration (Different Error Messages, Registration Reveals Users, Password Reset Reveals)
 > - OAuth State Parameter, Auto-Login After Registration
 
+### **A08:2025 – Software or Data Integrity Failures**
+
+> - Небезопасная десериализация (ObjectInputStream без Filter, XStream без Security Setup, XMLDecoder User Input, Jackson Default Typing, Kryo без Registration, SnakeYAML Unsafe Constructor, Base64+ObjectInputStream, RMI Registry, readObject без Validation, Hessian без Whitelist, Protostuff Dynamic Schema, ActiveMQ ObjectMessage, Redis Deserialization, Cookie Deserialization, Spring Remoting)
+> - Проверка целостности (File Download без Hash, MD5 для Integrity, SHA-1 для Integrity, Missing HMAC на Serialized Data, Trust All Certificates, Hostname Verifier Disabled, Missing Certificate Pinning, XML Signature Not Verified, SAML Signature Bypass, JWT None Algorithm, CRC32 для Security, Weak Random для Integrity Token)
+> - Динамическая загрузка классов (Class.forName User Input, URLClassLoader User Input, Reflection Method Invoke, GroovyClassLoader User Code, Dynamic Proxy без Whitelist, Context ClassLoader User Input, Plugin Loading без Signature, Java Agent без Signature, ASM Bytecode User Input)
+> - Supply Chain / Зависимости (Maven Repository HTTP, SNAPSHOT in Production, Remote JAR over HTTP, JAR Loading без Code Signing)
+> - Обновления без проверки целостности (Auto-Update over HTTP, Update без Signature Verification, Download and Exec без Verify)
+> - Целостность данных (Jackson readValue Object/Map, JNDI ObjectFactory User Input, SpEL из Database, Externalized Config без Integrity, Zip Slip on Extract)
+> - Скрипты и исполняемый код (ScriptEngine User Code, EL/SpEL из User Input, Spring Expression из Database)
+
+### **A09:2025 – Security Logging & Alerting Failures**
+
+> - Логирование чувствительных данных (Password Plaintext, Token/API Key, Credit Card PAN, PII/Personal Data, Full HTTP Request Body, User Object toString, Exception with Credentials, SQL Query with Values, Private Key Material, Session ID в логах)
+> - Log Injection (CRLF Injection, Request Parameter Direct Log, User-Agent без Sanitize, Referer Header, Log4Shell Pattern, Format String Injection)
+> - Отсутствие логирования security-событий (Authentication Failure, Successful Login, Authorization Failure, Account Lockout, Password Change, Privilege Escalation, Account Deletion, Data Export, Input Validation Failure, Token Invalidation)
+> - Неправильные уровни логирования (Security Event на DEBUG, Critical Event на INFO, Exception Swallowed without Log, System.out вместо Logger, Security Exception Message Only)
+> - Audit Log — целостность и полнота (без User Context, без Timestamp, без IP Address, в той же БД, Deletable Audit Log, без Correlation ID)
+> - Алертинг и мониторинг (Rate Limit без Alert, Security Event без Metrics, No Logging in Filter Chain, Scheduled Security Job без Logging)
+> - Конфигурация логирования (Logging Disabled Globally, Security Package Logging OFF, Log File без Rotation, AsyncAppender Discard Security Events, MDC без User Context, Log Level Change Unprotected)
+> - Специфические случаи (First Login без Alert, Certificate Validation Error Silent, MFA Bypass без Log, File Upload без Log, Exception без Context, Suspicious Activity без Alert)
+
+### **A10:2025 – Mishandling of Exceptional Conditions**
+
+> - Раскрытие информации через ответы об ошибках (Stacktrace in HTTP Response, Stacktrace in Response Body, Spring server.error Full Details, SQLException Message Exposed, File Path Disclosed, ClassNotFoundException Exposed, NPE Message in Response, Validation BindingResult Exposed, Exception Cause Chain, Generic ExceptionHandler with getMessage, Request Params in Error Response)
+> - Игнорирование исключений (Empty Catch Block, SecurityException Silent, Crypto Exception Returns Default, IOException in Auth Swallowed, InterruptedException без interrupt(), Multiple Exceptions One Catch Obscures)
+> - Небезопасное состояние после исключения (Transaction Committed after Exception, Resource Not Closed on Exception, SecurityContext Not Cleared, Lock Not Released in Finally, Session Not Invalidated on Auth Error, Partial File Write, Concurrent State Corrupted)
+> - Повторный выброс и оборачивание исключений (AccessDeniedException wrapped as RuntimeException, AuthException wrapped as 500, Rethrow with Sensitive Data, return in Finally Suppresses Exception, Exception in Finally Masks Original)
+> - Неверные HTTP статус-коды (Auth Failure returns 200, AccessDenied returns 404, Validation Error returns 500, Rate Limit returns 500 вместо 429)
+> - Обработка ошибок в асинхронном контексте (CompletableFuture без exceptionally, Thread без UncaughtExceptionHandler, Executor Submit без Future.get, Scheduled Task без Alerting on Failure)
+> - Небезопасные паттерны обработки (Return true on Security Exception, Null Return in loadUserByUsername, Catch java.lang.Error, Double Catch Obscures Security, Break in Loop on Security Check, Exception Timing Oracle)
+> - Конфигурация и глобальная обработка (No Global ControllerAdvice, Whitelabel Error Page Enabled, Custom /error с Exception Details, Debug Mode in Production, Missing Security Exception Handlers, server.error.include-stacktrace=always)
+
 ***
