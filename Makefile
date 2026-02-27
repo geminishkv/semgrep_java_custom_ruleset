@@ -18,8 +18,10 @@ BINNAME  ?= java_recon
 install:
 	@echo "Installing java_recon to $(SHAREDIR)..."
 	install -d "$(SHAREDIR)/scripts"
+	install -d "$(SHAREDIR)/tools"
 	install -m 0755 $(SCRIPTS_DIR)/semgrep-*.sh "$(SHAREDIR)/scripts/"
 	install -m 0755 $(SCRIPTS_DIR)/java_recon.sh "$(SHAREDIR)/scripts/java_recon"
+	install -m 0755 tools/java_recon_dedupe.sh "$(SHAREDIR)/tools/java_recon_dedupe.sh"
 	install -d "$(BINDIR)"
 	printf '%s\n' '#!/usr/bin/env bash' >  "$(BINDIR)/$(BINNAME)"
 	printf '%s\n' 'exec "$(SHAREDIR)/scripts/java_recon" "$$@"' >> "$(BINDIR)/$(BINNAME)"

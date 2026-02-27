@@ -67,6 +67,9 @@ case "${cmd}" in
     "${SCRIPT_DIR}/semgrep-dist-clean.sh" \
       "${REPORT_DIR}" "${JAVA_RULES_DIR}" "${CUSTOM_RULES_DIR}"
     ;;
+  dedupe)
+    "${SCRIPT_DIR}/semgrep-dedupe.sh"
+    ;;
   help|--help|-h|"")
     "${SCRIPT_DIR}/semgrep-help.sh" \
       "${JAVA_RULES_DIR}" "${CUSTOM_RULES_DIR}" "${SRC_DIR}" "${REPORT_DIR}"
